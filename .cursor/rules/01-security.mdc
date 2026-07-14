@@ -1,0 +1,13 @@
+---
+description: 安全红线（密钥、.env、SQL、API）
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# 安全红线
+
+- 禁止硬编码密钥/Token；用环境变量
+- `.env*` 不得进 Git（`.env.example` 除外）
+- SQL 参数化；API 统一错误结构，不泄露 stack trace
+- 外部 HTTP 必须超时 + 有限重试
+- 生产 SSH/部署/DB：遵守 **`prod-safety`**（零数据丢失、不碰同机其他服务）

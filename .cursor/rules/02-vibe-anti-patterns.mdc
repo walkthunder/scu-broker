@@ -1,0 +1,12 @@
+---
+description: AI 生成代码反模式
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# Vibe 反模式
+
+- 只改任务相关文件，禁止扩大 diff
+- 禁止空 catch/except；禁止遗留 console.log 调试
+- 禁止无需求的抽象层/设计模式
+- 新增依赖须说明理由；优先复用项目已有库

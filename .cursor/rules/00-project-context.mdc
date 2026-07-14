@@ -1,0 +1,11 @@
+---
+description: scu-broker 项目上下文
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# scu-broker
+
+技术栈：**generic**。修改前阅读周边实现，匹配既有目录与命名。
+
+Vibe 约束见同目录 `01-security.mdc`、`02-vibe-anti-patterns.mdc`。提交：`da standards scan` → `da standards commit`。
