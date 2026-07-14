@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "mode": "strict",
+  "project": {
+    "name": "scu-broker",
+    "stack": "generic"
+  },
+  "commit": {
+    "require_task": true,
+    "lifecycle": true
+  },
+  "guard": {
+    "env_strict": true,
+    "agent_window_hours": 2,
+    "require_ai_attribution": true
+  }
+}
