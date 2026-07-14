@@ -1,0 +1,11 @@
+---
+description: Agent 平台 / Skills 约定
+globs: [".agents/**", "platform/**", "plane/**"]
+alwaysApply: false
+---
+
+# Agent 平台
+
+- L0/L1 边界见项目 ARCHITECTURE / roadmap
+- Skills 用全局 `team-sync`，不复制备用脚本
+- PM 台账走 **`@da pm`**；禁止删 YAML 任务 id
