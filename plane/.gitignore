@@ -1,0 +1,9 @@
+.env
+.cache/
+.sync-state.json
+progress_report.json
+progress_report.md
+reconcile_report.json
+reconcile_report.md
+sync_preview.json
+sync_preview.md

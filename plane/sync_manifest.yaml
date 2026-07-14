@@ -1,0 +1,14 @@
+# 任务台账 — 复制到 plane/sync_manifest.yaml
+
+meta:
+  project_name: 项目名称
+
+tasks:
+  - id: M001-1
+    milestone: M001
+    name: 示例任务
+    status: 未开始
+    priority: P1
+    kind: feature          # feature|enhancement|bug|docs|ops|chore|uat|deferred
+    tags: []               # 域标签，见 taxonomy.yaml
+    note: 补充说明

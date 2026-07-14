@@ -1,0 +1,23 @@
+# 通用 pm-export 配置
+# 复制到 <repo>/plane/pm-export.config.yaml（推荐）或 .agents/{平台}/pm-export.config.yaml
+
+platform:
+  name: "平台显示名"          # 必填，须加引号（含中文/特殊字符）
+  code_prefix: P104-x.x       # 华茂项目编号前缀
+
+# Git 仓库根目录（相对本 config 文件）
+# plane/pm-export.config.yaml → repo_root: .  （解析为仓库根，非 plane/ 目录）
+# .agents/foo/pm-export.config.yaml → repo_root: ../..
+repo_root: .
+
+milestones:
+  data: plane/milestones.yaml
+  # .agents 布局示例（配合 repo_root: ../..）：
+  # data: .agents/platform/milestones.yaml
+
+projects_tasks:
+  projects: plane/projects.yaml
+  tasks: plane/tasks.yaml
+  # .agents 布局示例：
+  # projects: .agents/platform/projects/projects.yaml
+  # tasks: .agents/platform/projects/tasks.yaml

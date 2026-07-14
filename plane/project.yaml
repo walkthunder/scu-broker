@@ -1,0 +1,34 @@
+# Plane 项目配置（复制到 <repo>/plane/project.yaml）
+# 勿在此文件写入 PLANE_API_KEY
+
+meta:
+  name: 项目名称
+  owner_default: 负责人
+
+plane:
+  project_id: ""                     # Plane URL 中 /projects/{uuid}/
+  project_url: ""                    # 可选；UI 地址，用于 preflight 与用户确认（例见 SKILL.md）
+  # workspace_slug / base_url 可选；默认 my + https://plane.webinfra.cloud/api/v1
+
+# 非标准布局时可覆盖（如 ragflow 仓库）
+paths:
+  milestones: plane/milestones.yaml
+  manifest: plane/sync_manifest.yaml
+  taxonomy: plane/taxonomy.yaml
+
+sources:
+  roadmap:                           # 梳理 roadmap 时优先扫描（相对 repo 根）
+    - docs/roadmap.md
+    - README.md
+
+  discover:                          # Tier B/C 文档发现（§PM台账 v3）
+    profile: auto
+    scan_docs: true
+    max_depth: 3
+
+# collect_progress.py 可选：变更文件 → 任务 hint（项目自定义）
+# collect:
+#   file_hints:
+#     - pattern: "plane/"
+#       task_hint: "PM-1"
+#       domain: "Plane sync"

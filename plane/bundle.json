@@ -1,0 +1,101 @@
+{
+  "generated_at": "2026-07-14T12:16:32.570Z",
+  "mode": "init",
+  "document_count": 0,
+  "bundle": {
+    "repo": {
+      "name": "scu-broker",
+      "slug": "scu-broker",
+      "workspace_root": "/Users/aaron/Projects/scu-broker",
+      "remote": "git@github.com:walkthunder/scu-broker.git",
+      "stack": "generic"
+    },
+    "documents": [],
+    "git": {
+      "commits": [
+        {
+          "hash": "4d2404e",
+          "full_hash": "4d2404e6322c47c9e42e0698fb8dd4d0aa66a026",
+          "date": "2026-07-14",
+          "author": "walkthunder",
+          "subject": "chore(infra): add DA standards and vibe guard baseline",
+          "type": "chore",
+          "scope": "infra",
+          "summary": "add DA standards and vibe guard baseline",
+          "task_id": null
+        },
+        {
+          "hash": "54b03c6",
+          "full_hash": "54b03c6f774fdb4f8679d0803486123b5ea2bc9c",
+          "date": "2026-07-14",
+          "author": "walkthunder",
+          "subject": "chore(infra): add DA standards and vibe guard baseline",
+          "type": "chore",
+          "scope": "infra",
+          "summary": "add DA standards and vibe guard baseline",
+          "task_id": null
+        }
+      ],
+      "working_tree": {
+        "branch": "main",
+        "staged": 5,
+        "modified": 5,
+        "untracked": 5,
+        "changed_files": [
+          ".cursor/rules/00-project-context.mdc",
+          ".cursor/rules/01-security.mdc",
+          ".cursor/rules/02-vibe-anti-patterns.mdc",
+          "README.md",
+          "docs/TEAM_STANDARDS.md",
+          ".da/context-me-snapshot.json",
+          ".da/current-task",
+          ".da/state.json",
+          ".da/task-cache.json",
+          "plane/"
+        ],
+        "diff_stat": ".cursor/rules/00-project-context.mdc    | 11 +++++++\n .cursor/rules/01-security.mdc           | 13 +++++++++\n .cursor/rules/02-vibe-anti-patterns.mdc | 12 ++++++++\n README.md                               |  1 +\n docs/TEAM_STANDARDS.md                  | 51 +++++++++++++++++++++++++++++++++\n 5 files changed, 88 insertions(+)",
+        "has_wip": true
+      }
+    },
+    "plane_snapshot": {
+      "fetched_at": null,
+      "adoptable_count": 0,
+      "adoptable": []
+    },
+    "existing_ledger": {
+      "milestone_ids": [
+        "M001"
+      ],
+      "task_ids": [
+        "M001-1"
+      ],
+      "milestones": [
+        {
+          "id": "M001"
+        }
+      ],
+      "tasks": [
+        {
+          "id": "M001-1",
+          "milestone_id": "M001",
+          "name": "示例任务",
+          "status": "未开始"
+        }
+      ]
+    },
+    "sources_config": {
+      "roadmap_paths": [],
+      "id_strategy": "generic"
+    },
+    "options": {
+      "locale": "zh-CN",
+      "mode": "init",
+      "refresh": false,
+      "allow_id_replace": true
+    },
+    "developer_email": "walkthunder@163.com",
+    "warnings": [
+      "WARN: Plane snapshot 为空 — generate 前请运行 da context，或 register 时 pull snapshot"
+    ]
+  }
+}
