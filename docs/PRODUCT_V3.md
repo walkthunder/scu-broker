@@ -1,11 +1,10 @@
 # CompriX V3 完整方案（产品 × 技术 × 运营）
 
-> **文档地位**：开发真相源（产品+落地）。综合：
-> - [`PRODUCT_UX_V2.md`](./PRODUCT_UX_V2.md) 客户感知与页面
-> - 你补充的数据模型 / API / SLA / 脱敏 / 通知 / 视觉 / 分期
-> - 现有 MVP 实现（[`REQUIREMENTS.md`](./REQUIREMENTS.md) + `apps/*`）
+> **文档地位**：研发落地真相源（产品规格 + 接口 + 分期）。  
+> **对外展示请优先使用**：[客户方案.md](./客户方案.md)（表述已按商务沟通规范整理）。
 >
-> **原则不变**：人谈机记；用**真实可运营数据**制造热闹，禁止造假活跃；一期不碰自动撮合 / 链 / IM / 自动支付 / AI。
+> 综合来源：[`PRODUCT_UX_V2.md`](./PRODUCT_UX_V2.md)、[`REQUIREMENTS.md`](./REQUIREMENTS.md)、现网 `apps/*`。  
+> **原则**：人谈机记；以真实可运营数据呈现市场活跃度，禁止伪造人气；一期不建设自动撮合、链、IM、自动支付、AI。
 
 ---
 
@@ -435,7 +434,8 @@ GET  /api/admin/dashboard            # 扩展 action_queue / sla counts
 
 | 文档 | 用途 |
 |------|------|
-| `PRD.md` | 原始极简 MVP |
+| **[客户方案.md](./客户方案.md)** | **对外展示 / 商务评审** |
+| `PRD.md` | 立项初期极简 MVP |
 | `REQUIREMENTS.md` | 已实现 MVP 约定 |
 | `PRODUCT_UX_V2.md` | 感知向产品稿 |
-| **`PRODUCT_V3.md`（本文）** | **产品+技术完整落地版** |
+| **`PRODUCT_V3.md`（本文）** | **产品+技术完整落地版（研发）** |

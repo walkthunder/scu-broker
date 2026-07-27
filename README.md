@@ -1,12 +1,13 @@
 # CompriX（scu-broker）
 
-算力/Token **行情大厅 + Broker 成交操作系统**。原则：**人谈机记**——线下谈价，系统记状态、报价、财务与脱敏动态。
+算力 / Token **行情大厅 + Broker 成交操作系统**。原则：**人谈机记**——线下谈价，系统记录状态、报价、财务与脱敏动态。
 
 | 文档 | 用途 |
 |------|------|
-| [docs/PRODUCT_V3.md](docs/PRODUCT_V3.md) | **产品+技术真相源**（大厅 Live、询价档位、deal_feeds…） |
-| [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) | MVP 状态机 / P0P1 / 验收 |
-| [PRD.md](PRD.md) | 原始极简 PRD |
+| [docs/客户方案.md](docs/客户方案.md) | **对外展示方案（推荐给客户）** |
+| [docs/PRODUCT_V3.md](docs/PRODUCT_V3.md) | 产品+技术落地细则（研发） |
+| [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) | MVP 状态机 / 验收基线 |
+| [PRD.md](PRD.md) | 立项初期极简 PRD |
 
 ## 结构
 
