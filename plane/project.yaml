@@ -2,8 +2,8 @@
 # 勿在此文件写入 PLANE_API_KEY
 
 meta:
-  name: 项目名称
-  owner_default: 负责人
+  name: CompriX MVP
+  owner_default: aaron
 
 plane:
   project_id: ""                     # Plane URL 中 /projects/{uuid}/

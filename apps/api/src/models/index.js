@@ -1,0 +1,300 @@
+import { DataTypes } from 'sequelize';
+import { sequelize } from '../config/database.js';
+
+export const User = sequelize.define(
+  'User',
+  {
+    id: { type: DataTypes.INTEGER.UNSIGNED, autoIncrement: true, primaryKey: true },
+    phone: { type: DataTypes.STRING(20), allowNull: false, unique: true },
+    name: { type: DataTypes.STRING(100), allowNull: true },
+    company_name: { type: DataTypes.STRING(200), allowNull: true },
+    email: { type: DataTypes.STRING(200), allowNull: true },
+    password_hash: { type: DataTypes.STRING(200), allowNull: true },
+    role: {
+      type: DataTypes.ENUM('customer', 'broker', 'admin'),
+      allowNull: false,
+      defaultValue: 'customer',
+    },
+  },
+  { tableName: 'users' },
+);
+
+export const Sku = sequelize.define(
+  'Sku',
+  {
+    id: { type: DataTypes.INTEGER.UNSIGNED, autoIncrement: true, primaryKey: true },
+    name: { type: DataTypes.STRING(100), allowNull: false },
+    type: { type: DataTypes.ENUM('gpu', 'token'), allowNull: false, defaultValue: 'gpu' },
+    unit: { type: DataTypes.STRING(50), allowNull: false, defaultValue: '小时' },
+    spec: { type: DataTypes.STRING(500), allowNull: true },
+    status: {
+      type: DataTypes.ENUM('active', 'inactive'),
+      allowNull: false,
+      defaultValue: 'active',
+    },
+    is_public: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
+    is_hot: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+    sort_weight: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+    selling_point: { type: DataTypes.STRING(255), allowNull: true },
+    delivery_note: { type: DataTypes.TEXT, allowNull: true },
+    image_url: { type: DataTypes.STRING(500), allowNull: true },
+  },
+  { tableName: 'skus' },
+);
+
+export const Supplier = sequelize.define(
+  'Supplier',
+  {
+    id: { type: DataTypes.INTEGER.UNSIGNED, autoIncrement: true, primaryKey: true },
+    name: { type: DataTypes.STRING(200), allowNull: false },
+    display_name: { type: DataTypes.STRING(100), allowNull: true },
+    contact_name: { type: DataTypes.STRING(100), allowNull: true },
+    contact_phone: { type: DataTypes.STRING(50), allowNull: true },
+    wechat: { type: DataTypes.STRING(100), allowNull: true },
+    skus: { type: DataTypes.STRING(500), allowNull: true },
+    price_style: { type: DataTypes.STRING(50), allowNull: true },
+    reliability: { type: DataTypes.STRING(50), allowNull: true },
+    note: { type: DataTypes.TEXT, allowNull: true },
+  },
+  { tableName: 'suppliers' },
+);
+
+export const ReferencePrice = sequelize.define(
+  'ReferencePrice',
+  {
+    id: { type: DataTypes.INTEGER.UNSIGNED, autoIncrement: true, primaryKey: true },
+    sku_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+    date: { type: DataTypes.DATEONLY, allowNull: false },
+    price_low: { type: DataTypes.DECIMAL(14, 2), allowNull: false },
+    price_mid: { type: DataTypes.DECIMAL(14, 2), allowNull: false },
+    price_high: { type: DataTypes.DECIMAL(14, 2), allowNull: false },
+    source: { type: DataTypes.STRING(50), allowNull: false, defaultValue: '人工录入' },
+    created_by: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+  },
+  { tableName: 'reference_prices' },
+);
+
+export const Rfq = sequelize.define(
+  'Rfq',
+  {
+    id: { type: DataTypes.INTEGER.UNSIGNED, autoIncrement: true, primaryKey: true },
+    customer_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+    sku_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+    quantity: { type: DataTypes.DECIMAL(14, 2), allowNull: false },
+    duration: { type: DataTypes.STRING(100), allowNull: true },
+    delivery_date: { type: DataTypes.DATEONLY, allowNull: true },
+    budget_range: { type: DataTypes.STRING(100), allowNull: true },
+    note: { type: DataTypes.TEXT, allowNull: true },
+    status: {
+      type: DataTypes.ENUM('pending', 'quoted', 'confirmed', 'rejected'),
+      allowNull: false,
+      defaultValue: 'pending',
+    },
+    broker_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+    submit_page: { type: DataTypes.STRING(50), allowNull: true },
+    sla_deadline: { type: DataTypes.DATE, allowNull: true },
+    reject_reason: { type: DataTypes.STRING(255), allowNull: true },
+  },
+  { tableName: 'rfqs' },
+);
+
+export const Quote = sequelize.define(
+  'Quote',
+  {
+    id: { type: DataTypes.INTEGER.UNSIGNED, autoIncrement: true, primaryKey: true },
+    rfq_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false, unique: true },
+    supplier_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+    broker_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+    price: { type: DataTypes.DECIMAL(14, 2), allowNull: false },
+    delivery_date: { type: DataTypes.DATEONLY, allowNull: true },
+    note: { type: DataTypes.TEXT, allowNull: true },
+    customer_view_note: { type: DataTypes.TEXT, allowNull: true },
+    status: {
+      type: DataTypes.ENUM('draft', 'pending', 'confirmed', 'rejected', 'expired'),
+      allowNull: false,
+      defaultValue: 'draft',
+    },
+    expiry_time: { type: DataTypes.DATE, allowNull: true },
+    sent_at: { type: DataTypes.DATE, allowNull: true },
+  },
+  { tableName: 'quotes' },
+);
+
+export const Order = sequelize.define(
+  'Order',
+  {
+    id: { type: DataTypes.INTEGER.UNSIGNED, autoIncrement: true, primaryKey: true },
+    quote_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false, unique: true },
+    customer_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+    supplier_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+    broker_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+    sku_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+    price: { type: DataTypes.DECIMAL(14, 2), allowNull: false },
+    status: {
+      type: DataTypes.ENUM(
+        '待签约',
+        '待交付',
+        '待验收',
+        '待结算',
+        '已完成',
+        '已取消',
+        '已赔付',
+      ),
+      allowNull: false,
+      defaultValue: '待签约',
+    },
+    signed_at: { type: DataTypes.DATE, allowNull: true },
+    delivered_at: { type: DataTypes.DATE, allowNull: true },
+    accepted_at: { type: DataTypes.DATE, allowNull: true },
+    settled_at: { type: DataTypes.DATE, allowNull: true },
+    penalty_amount: { type: DataTypes.DECIMAL(14, 2), allowNull: true },
+    penalty_note: { type: DataTypes.TEXT, allowNull: true },
+  },
+  { tableName: 'orders' },
+);
+
+export const OrderLog = sequelize.define(
+  'OrderLog',
+  {
+    id: { type: DataTypes.INTEGER.UNSIGNED, autoIncrement: true, primaryKey: true },
+    order_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+    from_status: { type: DataTypes.STRING(50), allowNull: true },
+    to_status: { type: DataTypes.STRING(50), allowNull: false },
+    note: { type: DataTypes.TEXT, allowNull: true },
+    operator_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+    is_customer_visible: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+  },
+  { tableName: 'order_logs', updatedAt: false },
+);
+
+export const Payment = sequelize.define(
+  'Payment',
+  {
+    id: { type: DataTypes.INTEGER.UNSIGNED, autoIncrement: true, primaryKey: true },
+    order_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+    type: {
+      type: DataTypes.ENUM('客户付款', '供应商放款', '赔付'),
+      allowNull: false,
+    },
+    amount: { type: DataTypes.DECIMAL(14, 2), allowNull: false },
+    method: { type: DataTypes.STRING(50), allowNull: true },
+    status: {
+      type: DataTypes.ENUM('待确认', '已确认'),
+      allowNull: false,
+      defaultValue: '已确认',
+    },
+    confirmed_by: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+    note: { type: DataTypes.TEXT, allowNull: true },
+  },
+  { tableName: 'payments' },
+);
+
+export const Attachment = sequelize.define(
+  'Attachment',
+  {
+    id: { type: DataTypes.INTEGER.UNSIGNED, autoIncrement: true, primaryKey: true },
+    related_type: {
+      type: DataTypes.ENUM('rfq', 'quote', 'order'),
+      allowNull: false,
+    },
+    related_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+    file_name: { type: DataTypes.STRING(255), allowNull: false },
+    file_path: { type: DataTypes.STRING(500), allowNull: false },
+    uploaded_by: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+  },
+  { tableName: 'attachments', updatedAt: false },
+);
+
+export const OtpCode = sequelize.define(
+  'OtpCode',
+  {
+    id: { type: DataTypes.INTEGER.UNSIGNED, autoIncrement: true, primaryKey: true },
+    phone: { type: DataTypes.STRING(20), allowNull: false },
+    code: { type: DataTypes.STRING(10), allowNull: false },
+    expires_at: { type: DataTypes.DATE, allowNull: false },
+    used: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+  },
+  { tableName: 'otp_codes', updatedAt: false },
+);
+
+export const Announcement = sequelize.define(
+  'Announcement',
+  {
+    id: { type: DataTypes.INTEGER.UNSIGNED, autoIncrement: true, primaryKey: true },
+    title: { type: DataTypes.STRING(200), allowNull: false },
+    content: { type: DataTypes.TEXT, allowNull: true },
+    position: {
+      type: DataTypes.ENUM('top', 'banner'),
+      allowNull: false,
+      defaultValue: 'top',
+    },
+    bg_color: { type: DataTypes.STRING(20), allowNull: false, defaultValue: '#1e293b' },
+    text_color: { type: DataTypes.STRING(20), allowNull: false, defaultValue: '#f8fafc' },
+    is_active: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+    start_time: { type: DataTypes.DATE, allowNull: true },
+    end_time: { type: DataTypes.DATE, allowNull: true },
+    created_by: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+  },
+  { tableName: 'announcements' },
+);
+
+export const DealFeed = sequelize.define(
+  'DealFeed',
+  {
+    id: { type: DataTypes.INTEGER.UNSIGNED, autoIncrement: true, primaryKey: true },
+    // 订单完成后自动生成草稿时写入；运营 seed / 样本可空
+    order_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+    region: { type: DataTypes.STRING(50), allowNull: false, defaultValue: '东部' },
+    sku_name: { type: DataTypes.STRING(100), allowNull: false },
+    deal_type: { type: DataTypes.STRING(50), allowNull: false, defaultValue: '时租' },
+    deal_date: { type: DataTypes.DATEONLY, allowNull: false },
+    is_published: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+    published_by: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+    published_at: { type: DataTypes.DATE, allowNull: true },
+  },
+  { tableName: 'deal_feeds' },
+);
+
+User.hasMany(Rfq, { foreignKey: 'customer_id', as: 'rfqs' });
+Rfq.belongsTo(User, { foreignKey: 'customer_id', as: 'customer' });
+Rfq.belongsTo(User, { foreignKey: 'broker_id', as: 'broker' });
+Rfq.belongsTo(Sku, { foreignKey: 'sku_id', as: 'sku' });
+Sku.hasMany(Rfq, { foreignKey: 'sku_id' });
+
+Sku.hasMany(ReferencePrice, { foreignKey: 'sku_id', as: 'prices' });
+ReferencePrice.belongsTo(Sku, { foreignKey: 'sku_id', as: 'sku' });
+
+Rfq.hasOne(Quote, { foreignKey: 'rfq_id', as: 'quote' });
+Quote.belongsTo(Rfq, { foreignKey: 'rfq_id', as: 'rfq' });
+Quote.belongsTo(Supplier, { foreignKey: 'supplier_id', as: 'supplier' });
+Quote.belongsTo(User, { foreignKey: 'broker_id', as: 'broker' });
+
+Quote.hasOne(Order, { foreignKey: 'quote_id', as: 'order' });
+Order.belongsTo(Quote, { foreignKey: 'quote_id', as: 'quote' });
+Order.belongsTo(User, { foreignKey: 'customer_id', as: 'customer' });
+Order.belongsTo(User, { foreignKey: 'broker_id', as: 'broker' });
+Order.belongsTo(Supplier, { foreignKey: 'supplier_id', as: 'supplier' });
+Order.belongsTo(Sku, { foreignKey: 'sku_id', as: 'sku' });
+Order.hasMany(OrderLog, { foreignKey: 'order_id', as: 'logs' });
+OrderLog.belongsTo(Order, { foreignKey: 'order_id' });
+OrderLog.belongsTo(User, { foreignKey: 'operator_id', as: 'operator' });
+Order.hasMany(Payment, { foreignKey: 'order_id', as: 'payments' });
+Payment.belongsTo(Order, { foreignKey: 'order_id', as: 'order' });
+DealFeed.belongsTo(Order, { foreignKey: 'order_id', as: 'order' });
+Order.hasOne(DealFeed, { foreignKey: 'order_id', as: 'deal_feed' });
+
+export const models = {
+  User,
+  Sku,
+  Supplier,
+  ReferencePrice,
+  Rfq,
+  Quote,
+  Order,
+  OrderLog,
+  Payment,
+  Attachment,
+  OtpCode,
+  Announcement,
+  DealFeed,
+};

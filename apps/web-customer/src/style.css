@@ -1,0 +1,134 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #0f172a;
+  --surface: #1e293b;
+  --border: #334155;
+  --text: #e2e8f0;
+  --muted: #94a3b8;
+  --accent: #f59e0b;
+  --up: #ef4444;
+  --down: #22c55e;
+}
+
+@layer base {
+  body {
+    @apply antialiased;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  }
+
+  input,
+  select,
+  textarea {
+    @apply rounded-sm border px-3 py-2 text-sm outline-none transition-colors;
+    background: #0f172a;
+    border-color: var(--border);
+    color: var(--text);
+  }
+
+  input:focus,
+  select:focus,
+  textarea:focus {
+    border-color: #64748b;
+    box-shadow: 0 0 0 1px #64748b;
+  }
+
+  input:disabled {
+    @apply opacity-60;
+    background: #1e293b;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex cursor-pointer items-center justify-center rounded-sm px-4 py-2 text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
+    background: var(--accent);
+    color: #0f172a;
+  }
+  .btn-primary:hover {
+    background: #d97706;
+  }
+
+  .btn-secondary {
+    @apply inline-flex cursor-pointer items-center justify-center rounded-sm border px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50;
+    border-color: var(--border);
+    background: transparent;
+    color: var(--text);
+  }
+  .btn-secondary:hover {
+    background: #1e293b;
+  }
+
+  .btn-ghost {
+    @apply inline-flex cursor-pointer items-center justify-center rounded-sm px-3 py-1.5 text-sm font-medium transition-colors;
+    color: var(--muted);
+  }
+  .btn-ghost:hover {
+    color: var(--text);
+    background: #1e293b;
+  }
+
+  .panel {
+    border: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  .page-title {
+    @apply text-xl font-semibold tracking-tight;
+    color: var(--text);
+  }
+
+  .page-desc {
+    @apply mt-1.5 text-sm;
+    color: var(--muted);
+  }
+
+  .field-label {
+    @apply block text-xs font-medium uppercase tracking-wide;
+    color: var(--muted);
+  }
+
+  .data-table {
+    @apply min-w-full text-left text-sm;
+  }
+
+  .data-table thead {
+    border-bottom: 1px solid var(--border);
+    background: #0f172a;
+    @apply text-[11px] font-medium uppercase tracking-wider;
+    color: var(--muted);
+  }
+
+  .data-table th {
+    @apply px-3 py-2.5 font-medium;
+  }
+
+  .data-table td {
+    @apply border-t px-3 py-2.5;
+    border-color: var(--border);
+  }
+
+  .data-table tbody tr:hover {
+    background: rgba(15, 23, 42, 0.6);
+  }
+
+  .mono-num {
+    @apply font-mono tabular-nums tracking-tight;
+  }
+
+  .price-up {
+    color: var(--up);
+  }
+  .price-down {
+    color: var(--down);
+  }
+  .accent {
+    color: var(--accent);
+  }
+}

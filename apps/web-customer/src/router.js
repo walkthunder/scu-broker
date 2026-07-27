@@ -1,0 +1,40 @@
+import { createRouter, createWebHistory } from 'vue-router';
+import { getToken } from './api';
+import Prices from './views/Prices.vue';
+import SkuDetail from './views/SkuDetail.vue';
+import RfqForm from './views/RfqForm.vue';
+import RfqSuccess from './views/RfqSuccess.vue';
+import MyOrders from './views/MyOrders.vue';
+import Login from './views/Login.vue';
+import RfqDetail from './views/RfqDetail.vue';
+import OrderDetail from './views/OrderDetail.vue';
+import About from './views/About.vue';
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes: [
+    { path: '/', name: 'prices', component: Prices },
+    { path: '/sku/:id', name: 'sku-detail', component: SkuDetail },
+    { path: '/login', name: 'login', component: Login },
+    { path: '/rfq', name: 'rfq', component: RfqForm, meta: { auth: true } },
+    { path: '/rfq/success', name: 'rfq-success', component: RfqSuccess, meta: { auth: true } },
+    { path: '/mine', name: 'mine', component: MyOrders, meta: { auth: true } },
+    { path: '/rfqs/:id', name: 'rfq-detail', component: RfqDetail, meta: { auth: true } },
+    { path: '/orders/:id', name: 'order-detail', component: OrderDetail, meta: { auth: true } },
+    { path: '/about', name: 'about', component: About },
+  ],
+  scrollBehavior() {
+    return { top: 0 };
+  },
+});
+
+router.beforeEach((to) => {
+  if (to.meta.auth && !getToken()) {
+    return { name: 'login', query: { redirect: to.fullPath } };
+  }
+  if (to.name === 'login' && getToken()) {
+    return { path: typeof to.query.redirect === 'string' ? to.query.redirect : '/mine' };
+  }
+});
+
+export default router;

@@ -1,27 +1,60 @@
-# 里程碑模板 — 复制到 plane/milestones.yaml
-# Excel 路径可由 skill 自动补全；首次导出会在 plane/pm-export/ 生成空白模板
-
 meta:
-  project_name: 项目名称
+  project_name: CompriX MVP
   template: plane/pm-export/华茂里程碑模板.xlsx
-  output: plane/pm-export/项目名称——里程碑.xlsx
+  output: plane/pm-export/CompriX-MVP——里程碑.xlsx
   sheet: "🎉 里程碑"
 
 project:
-  name: 项目名称
-  start: "2026-01-01"
-  end: "2026-12-31"
-  owner_default: 负责人
+  name: CompriX MVP
+  start: "2026-07-14"
+  end: "2026-08-04"
+  owner_default: aaron
 
 milestones:
   - id: M001
     roadmap_no: 1
-    name: 第一阶段
-    goal: 目标描述
-    deliverables: 交付物列表
-    status: 未开始          # 已完成 | 进行中 | 部分完成 | 未开始
+    name: Week1 骨架与主数据
+    goal: DB/鉴权/SKU/供应商/参考价 + 客户参考价与询价入口
+    deliverables: API 骨架、主数据 CRUD、客户前台参考价与询价表单
+    status: 已完成
     priority: P0
-    plan_date: "2026-01-15"
-    actual_date: ""
-    owner: 负责人
-    tasks: roadmap#1
+    plan_date: "2026-07-20"
+    actual_date: "2026-07-14"
+    owner: aaron
+    tasks: M001
+
+  - id: M002
+    roadmap_no: 2
+    name: Week2 交易闭环
+    goal: RFQ→报价→确认→订单状态机
+    deliverables: 询价管理、报价发送与确认、订单生成与日志
+    status: 已完成
+    priority: P0
+    plan_date: "2026-07-27"
+    actual_date: "2026-07-14"
+    owner: aaron
+    tasks: M002
+
+  - id: M003
+    roadmap_no: 3
+    name: Week3 收尾上线
+    goal: 客户订单页、财务、通知、Docker 部署
+    deliverables: 财务手记账、附件、Dashboard、通知、Compose 上线
+    status: 已完成
+    priority: P0
+    plan_date: "2026-08-04"
+    actual_date: "2026-07-14"
+    owner: aaron
+    tasks: M003
+
+  - id: M004
+    roadmap_no: 4
+    name: V3 行情大厅与运营
+    goal: 交易台首屏、Live 轮询、通告/热门/成交动态、询价档位与过期
+    deliverables: PRODUCT_V3 落地、客户大厅改版、deal_feeds、功能测试全绿
+    status: 进行中
+    priority: P0
+    plan_date: "2026-07-28"
+    actual_date: "2026-07-15"
+    owner: aaron
+    tasks: M004

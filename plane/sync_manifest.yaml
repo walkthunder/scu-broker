@@ -1,14 +1,120 @@
-# 任务台账 — 复制到 plane/sync_manifest.yaml
-
 meta:
-  project_name: 项目名称
+  project_name: CompriX MVP
 
 tasks:
   - id: M001-1
     milestone: M001
-    name: 示例任务
-    status: 未开始
+    name: 落盘开发需求文档 REQUIREMENTS.md
+    status: 已完成
+    priority: P0
+    kind: docs
+    tags: [docs]
+    note: 角色/状态机/P0P1/缺口约定/验收标准
+
+  - id: M001-2
+    milestone: M001
+    name: Monorepo 骨架与 Docker Compose
+    status: 已完成
+    priority: P0
+    kind: chore
+    tags: [infra]
+    note: apps/api + web-customer + web-admin + compose
+
+  - id: M001-3
+    milestone: M001
+    name: 数据库建表与 Express 鉴权
+    status: 已完成
+    priority: P0
+    kind: feature
+    tags: [backend]
+    note: 10 表 + 客户验证码/后台密码登录
+
+  - id: M001-4
+    milestone: M001
+    name: SKU/供应商/参考价后台 CRUD
+    status: 已完成
+    priority: P0
+    kind: feature
+    tags: [backend, frontend]
+    note: 管理后台主数据页
+
+  - id: M001-5
+    milestone: M001
+    name: 客户前台参考价页与询价表单
+    status: 已完成
+    priority: P0
+    kind: feature
+    tags: [frontend]
+    note: 验证码登录 + 提交 RFQ
+
+  - id: M002-1
+    milestone: M002
+    name: 询价管理与分配 Broker
+    status: 已完成
+    priority: P0
+    kind: feature
+    tags: [backend, frontend]
+    note: 后台 RFQ 列表/筛选/分配
+
+  - id: M002-2
+    milestone: M002
+    name: 报价录入发送与客户确认拒绝
+    status: 已完成
+    priority: P0
+    kind: feature
+    tags: [backend, frontend]
+    note: 一 RFQ 一报价；确认后生成订单
+
+  - id: M002-3
+    milestone: M002
+    name: 订单状态机与操作日志
+    status: 已完成
+    priority: P0
+    kind: feature
+    tags: [backend, frontend]
+    note: 五态推进 + order_logs
+
+  - id: M003-1
+    milestone: M003
+    name: 客户「我的订单」与进度展示
+    status: 已完成
     priority: P1
-    kind: feature          # feature|enhancement|bug|docs|ops|chore|uat|deferred
-    tags: []               # 域标签，见 taxonomy.yaml
-    note: 补充说明
+    kind: feature
+    tags: [frontend]
+    note: 询价/订单列表与详情进度条
+
+  - id: M003-2
+    milestone: M003
+    name: 财务管理与附件上传
+    status: 已完成
+    priority: P1
+    kind: feature
+    tags: [backend, frontend]
+    note: 收/付/赔手记账 + 附件
+
+  - id: M003-3
+    milestone: M003
+    name: Dashboard、通知与 Compose 上线
+    status: 已完成
+    priority: P1
+    kind: feature
+    tags: [backend, infra]
+    note: 统计卡片、SMTP/短信开关、冷启动种子数据
+
+  - id: M004-1
+    milestone: M004
+    name: V3 行情大厅 Live 与询价体验
+    status: 进行中
+    priority: P0
+    kind: feature
+    tags: [frontend, backend, docs]
+    note: 报价板首屏、30s 轮询、时长档位、PRODUCT_V3/README 对齐
+
+  - id: M004-2
+    milestone: M004
+    name: 通告/成交动态/过期与功能测试
+    status: 进行中
+    priority: P0
+    kind: feature
+    tags: [backend, frontend, test]
+    note: announcements、deal_feeds 发布、expire-quotes、test:functional
