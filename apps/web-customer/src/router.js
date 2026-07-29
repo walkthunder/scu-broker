@@ -9,6 +9,9 @@ import Login from './views/Login.vue';
 import RfqDetail from './views/RfqDetail.vue';
 import OrderDetail from './views/OrderDetail.vue';
 import About from './views/About.vue';
+import Indices from './views/Indices.vue';
+import Forwards from './views/Forwards.vue';
+import Bills from './views/Bills.vue';
 
 const router = createRouter({
   history: createWebHistory(),
@@ -21,6 +24,9 @@ const router = createRouter({
     { path: '/mine', name: 'mine', component: MyOrders, meta: { auth: true } },
     { path: '/rfqs/:id', name: 'rfq-detail', component: RfqDetail, meta: { auth: true } },
     { path: '/orders/:id', name: 'order-detail', component: OrderDetail, meta: { auth: true } },
+    { path: '/indices', name: 'indices', component: Indices },
+    { path: '/forwards', name: 'forwards', component: Forwards, meta: { auth: true } },
+    { path: '/bills', name: 'bills', component: Bills, meta: { auth: true } },
     { path: '/about', name: 'about', component: About },
   ],
   scrollBehavior() {

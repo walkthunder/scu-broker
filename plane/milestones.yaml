@@ -58,3 +58,39 @@ milestones:
     actual_date: "2026-07-15"
     owner: aaron
     tasks: M004
+
+  - id: M005
+    roadmap_no: 5
+    name: V4 价格指数
+    goal: 先有可发布的日结算价 S；跳变复核；已结算 print 锁定
+    deliverables: price_indices/index_prints、Admin/Customer 指数页、指数规则文档、功能测试
+    status: 已完成
+    priority: P0
+    plan_date: "2026-08-11"
+    actual_date: "2026-07-29"
+    owner: aaron
+    tasks: M005
+
+  - id: M006
+    roadmap_no: 6
+    name: V4 远期现金结算
+    goal: 锁价 X → 到期按 S 现金差价；双边/代理确认；72h 超时；Dashboard 北星
+    deliverables: forwards/bills、合约台/持仓/账单、沙盘 1.5X/0.7X、结算规则文档
+    status: 已完成
+    priority: P0
+    plan_date: "2026-08-25"
+    actual_date: "2026-07-29"
+    owner: aaron
+    tasks: M006
+
+  - id: M007
+    roadmap_no: 7
+    name: V4 实物交割通道
+    goal: 白名单 + T-7～T-0 窗口 + 工单；实物占比可控
+    deliverables: channels/whitelists/delivery_orders、占比看板
+    status: 待开始
+    priority: P1
+    plan_date: "2026-09-08"
+    actual_date: ""
+    owner: aaron
+    tasks: M007

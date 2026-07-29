@@ -9,6 +9,7 @@
     "db:sync": "node scripts/sync-db.js",
     "db:seed": "node scripts/seed.js",
     "db:seed:demo": "node scripts/seed-demo.js",
+    "sandbox:forward": "node scripts/sandbox-forward.js",
     "test:functional": "node tests/run.js",
     "test": "npm run test:functional"
   },

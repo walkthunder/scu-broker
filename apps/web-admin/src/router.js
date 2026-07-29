@@ -11,6 +11,9 @@ import Orders from './views/Orders.vue';
 import Finance from './views/Finance.vue';
 import Announcements from './views/Announcements.vue';
 import DealFeeds from './views/DealFeeds.vue';
+import Indices from './views/Indices.vue';
+import Forwards from './views/Forwards.vue';
+import SettlementBills from './views/SettlementBills.vue';
 
 const router = createRouter({
   history: createWebHistory('/admin/'),
@@ -25,6 +28,9 @@ const router = createRouter({
         { path: 'skus', component: Skus },
         { path: 'suppliers', component: Suppliers },
         { path: 'prices', component: ReferencePrices },
+        { path: 'indices', component: Indices },
+        { path: 'forwards', component: Forwards },
+        { path: 'settlement-bills', component: SettlementBills },
         { path: 'rfqs', component: Rfqs },
         { path: 'orders', component: Orders },
         { path: 'finance', component: Finance },

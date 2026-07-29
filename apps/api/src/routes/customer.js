@@ -480,4 +480,70 @@ router.get('/orders/:id', ...portalAuth, async (req, res, next) => {
   }
 });
 
+// —— V4 indices / forwards / bills ——
+router.get('/indices', async (_req, res, next) => {
+  try {
+    const { listIndices, getLatestPublished } = await import('../services/index-price.js');
+    const list = await listIndices({ activeOnly: true });
+    const out = [];
+    for (const idx of list) {
+      const j = idx.toJSON();
+      const latest = await getLatestPublished(idx.id);
+      j.latest_published = latest
+        ? { date: latest.date, settle_price: Number(latest.settle_price) }
+        : null;
+      out.push(j);
+    }
+    ok(res, out);
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/indices/:id/prints', async (req, res, next) => {
+  try {
+    const { listPrints } = await import('../services/index-price.js');
+    const prints = await listPrints(req.params.id, { from: req.query.from, to: req.query.to });
+    ok(
+      res,
+      prints
+        .filter((p) => p.status === 'published')
+        .map((p) => ({
+          date: p.date,
+          settle_price: Number(p.settle_price),
+          source: p.source,
+        })),
+    );
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/forwards', ...portalAuth, async (req, res, next) => {
+  try {
+    const { listForwardsForUser } = await import('../services/forward-settle.js');
+    ok(res, await listForwardsForUser(req.user.id));
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/forwards/:id/confirm', ...portalAuth, async (req, res, next) => {
+  try {
+    const { confirmForward } = await import('../services/forward-settle.js');
+    ok(res, await confirmForward(req.params.id, req.user.id), '已确认');
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/settlement-bills', ...portalAuth, async (req, res, next) => {
+  try {
+    const { listBillsForUser } = await import('../services/forward-settle.js');
+    ok(res, await listBillsForUser(req.user.id));
+  } catch (e) {
+    next(e);
+  }
+});
+
 export default router;

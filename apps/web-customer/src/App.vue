@@ -14,8 +14,8 @@ function logout() {
 function navClass(name) {
   const active =
     route.name === name ||
-    (name === 'mine' && ['rfq-detail', 'order-detail'].includes(route.name)) ||
-    (name === 'prices' && route.name === 'sku-detail');
+    (name === 'mine' && ['rfq-detail', 'order-detail', 'forwards', 'bills'].includes(route.name)) ||
+    (name === 'prices' && ['sku-detail', 'indices'].includes(route.name));
   return [
     'cursor-pointer whitespace-nowrap border-b-2 px-1 py-3 text-sm transition-colors',
     active ? 'border-amber-500 font-medium text-slate-100' : 'border-transparent text-slate-400 hover:text-slate-200',
@@ -36,7 +36,10 @@ function navClass(name) {
           </router-link>
           <nav class="hidden items-center gap-5 sm:flex">
             <router-link :to="{ name: 'prices' }" :class="navClass('prices')">行情</router-link>
+            <router-link :to="{ name: 'indices' }" :class="navClass('indices')">指数</router-link>
             <router-link :to="{ name: 'rfq' }" :class="navClass('rfq')">询价</router-link>
+            <router-link :to="{ name: 'forwards' }" :class="navClass('forwards')">持仓</router-link>
+            <router-link :to="{ name: 'bills' }" :class="navClass('bills')">账单</router-link>
             <router-link :to="{ name: 'mine' }" :class="navClass('mine')">工作台</router-link>
             <router-link :to="{ name: 'about' }" :class="navClass('about')">保障</router-link>
           </nav>

@@ -283,6 +283,124 @@ Payment.belongsTo(Order, { foreignKey: 'order_id', as: 'order' });
 DealFeed.belongsTo(Order, { foreignKey: 'order_id', as: 'order' });
 Order.hasOne(DealFeed, { foreignKey: 'order_id', as: 'deal_feed' });
 
+export const PriceIndex = sequelize.define(
+  'PriceIndex',
+  {
+    id: { type: DataTypes.INTEGER.UNSIGNED, autoIncrement: true, primaryKey: true },
+    code: { type: DataTypes.STRING(50), allowNull: false, unique: true },
+    name: { type: DataTypes.STRING(200), allowNull: false },
+    sku_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+    status: {
+      type: DataTypes.ENUM('active', 'inactive'),
+      allowNull: false,
+      defaultValue: 'active',
+    },
+    jump_threshold_pct: { type: DataTypes.DECIMAL(8, 2), allowNull: false, defaultValue: 20 },
+  },
+  { tableName: 'price_indices' },
+);
+
+export const IndexPrint = sequelize.define(
+  'IndexPrint',
+  {
+    id: { type: DataTypes.INTEGER.UNSIGNED, autoIncrement: true, primaryKey: true },
+    index_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+    date: { type: DataTypes.DATEONLY, allowNull: false },
+    settle_price: { type: DataTypes.DECIMAL(14, 2), allowNull: false },
+    source: {
+      type: DataTypes.ENUM('price_mid', 'manual'),
+      allowNull: false,
+      defaultValue: 'price_mid',
+    },
+    status: {
+      type: DataTypes.ENUM('draft', 'pending_review', 'published'),
+      allowNull: false,
+      defaultValue: 'draft',
+    },
+  },
+  { tableName: 'index_prints', indexes: [{ unique: true, fields: ['index_id', 'date'] }] },
+);
+
+export const ForwardContract = sequelize.define(
+  'ForwardContract',
+  {
+    id: { type: DataTypes.INTEGER.UNSIGNED, autoIncrement: true, primaryKey: true },
+    index_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+    buyer_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+    seller_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+    qty: { type: DataTypes.DECIMAL(14, 4), allowNull: false },
+    unit: { type: DataTypes.STRING(50), allowNull: false, defaultValue: '月' },
+    strike_price: { type: DataTypes.DECIMAL(14, 2), allowNull: false },
+    expiry_date: { type: DataTypes.DATEONLY, allowNull: false },
+    settle_mode: {
+      type: DataTypes.ENUM('cash', 'physical'),
+      allowNull: false,
+      defaultValue: 'cash',
+    },
+    status: {
+      type: DataTypes.ENUM(
+        'draft',
+        'pending_confirm',
+        'open',
+        'settled',
+        'delivered',
+        'cancelled',
+      ),
+      allowNull: false,
+      defaultValue: 'pending_confirm',
+    },
+    broker_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+    buyer_confirmed_at: { type: DataTypes.DATE, allowNull: true },
+    seller_confirmed_at: { type: DataTypes.DATE, allowNull: true },
+    buyer_confirm_by: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+    seller_confirm_by: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+    confirm_deadline_at: { type: DataTypes.DATE, allowNull: true },
+    cancel_reason: { type: DataTypes.STRING(255), allowNull: true },
+    note: { type: DataTypes.TEXT, allowNull: true },
+  },
+  { tableName: 'forward_contracts' },
+);
+
+export const SettlementBill = sequelize.define(
+  'SettlementBill',
+  {
+    id: { type: DataTypes.INTEGER.UNSIGNED, autoIncrement: true, primaryKey: true },
+    contract_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false, unique: true },
+    settle_date: { type: DataTypes.DATEONLY, allowNull: false },
+    settle_price: { type: DataTypes.DECIMAL(14, 2), allowNull: false },
+    settle_price_date: { type: DataTypes.DATEONLY, allowNull: false },
+    strike: { type: DataTypes.DECIMAL(14, 2), allowNull: false },
+    qty: { type: DataTypes.DECIMAL(14, 4), allowNull: false },
+    amount: { type: DataTypes.DECIMAL(14, 2), allowNull: false },
+    pay_direction: {
+      type: DataTypes.ENUM('seller_to_buyer', 'buyer_to_seller', 'none'),
+      allowNull: false,
+    },
+    pay_status: {
+      type: DataTypes.ENUM('pending', 'done'),
+      allowNull: false,
+      defaultValue: 'pending',
+    },
+    confirmed_by: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+    confirmed_at: { type: DataTypes.DATE, allowNull: true },
+  },
+  { tableName: 'settlement_bills' },
+);
+
+PriceIndex.belongsTo(Sku, { foreignKey: 'sku_id', as: 'sku' });
+Sku.hasMany(PriceIndex, { foreignKey: 'sku_id', as: 'indices' });
+PriceIndex.hasMany(IndexPrint, { foreignKey: 'index_id', as: 'prints' });
+IndexPrint.belongsTo(PriceIndex, { foreignKey: 'index_id', as: 'index' });
+
+ForwardContract.belongsTo(PriceIndex, { foreignKey: 'index_id', as: 'index' });
+PriceIndex.hasMany(ForwardContract, { foreignKey: 'index_id', as: 'forwards' });
+ForwardContract.belongsTo(User, { foreignKey: 'buyer_id', as: 'buyer' });
+ForwardContract.belongsTo(User, { foreignKey: 'seller_id', as: 'seller' });
+ForwardContract.belongsTo(User, { foreignKey: 'broker_id', as: 'broker' });
+ForwardContract.hasOne(SettlementBill, { foreignKey: 'contract_id', as: 'bill' });
+SettlementBill.belongsTo(ForwardContract, { foreignKey: 'contract_id', as: 'contract' });
+SettlementBill.belongsTo(User, { foreignKey: 'confirmed_by', as: 'confirmer' });
+
 export const models = {
   User,
   Sku,
@@ -297,4 +415,8 @@ export const models = {
   OtpCode,
   Announcement,
   DealFeed,
+  PriceIndex,
+  IndexPrint,
+  ForwardContract,
+  SettlementBill,
 };

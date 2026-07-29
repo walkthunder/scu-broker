@@ -8,6 +8,8 @@ import {
   ReferencePrice,
   Announcement,
   DealFeed,
+  PriceIndex,
+  IndexPrint,
 } from '../src/models/index.js';
 import { todayShanghai, addDaysShanghai } from '../src/utils/market.js';
 
@@ -273,9 +275,58 @@ async function seed() {
     }
   }
 
+  // 远期对冲双方（前台可登录）
+  for (const c of [
+    { phone: '13900001001', name: '买方·星云AI', company_name: '星云智能' },
+    { phone: '13900001002', name: '卖方·云海算力', company_name: '云海算力' },
+  ]) {
+    await User.findOrCreate({
+      where: { phone: c.phone },
+      defaults: {
+        phone: c.phone,
+        name: c.name,
+        company_name: c.company_name,
+        role: 'customer',
+        email: `${c.phone}@comprix.local`,
+      },
+    });
+  }
+
+  // 首发指数：锚定 H100 包月
+  const h100m = skus.find((s) => s.name === 'H100 包月') || skus[0];
+  const [idx] = await PriceIndex.findOrCreate({
+    where: { code: 'H100-M' },
+    defaults: {
+      code: 'H100-M',
+      name: 'H100 包月结算指数',
+      sku_id: h100m.id,
+      status: 'active',
+      jump_threshold_pct: 20,
+    },
+  });
+  const midToday = await ReferencePrice.findOne({ where: { sku_id: h100m.id, date: today } });
+  if (midToday) {
+    const [print] = await IndexPrint.findOrCreate({
+      where: { index_id: idx.id, date: today },
+      defaults: {
+        index_id: idx.id,
+        date: today,
+        settle_price: midToday.price_mid,
+        source: 'price_mid',
+        status: 'published',
+      },
+    });
+    if (print.status !== 'published') {
+      print.status = 'published';
+      print.settle_price = midToday.price_mid;
+      await print.save();
+    }
+  }
+
   console.log('Seed done.');
   console.log(`Admin login: ${config.admin.phone} / ${config.admin.password}`);
   console.log('Broker login: 13800000001 / broker123');
+  console.log('Forward parties OTP: 13900001001 / 13900001002');
   process.exit(0);
 }
 

@@ -118,3 +118,39 @@ tasks:
     kind: feature
     tags: [backend, frontend, test]
     note: announcements、deal_feeds 发布、expire-quotes、test:functional
+
+  - id: M005-1
+    milestone: M005
+    name: 指数与日结价模型及发布锁定
+    status: 已完成
+    priority: P0
+    kind: feature
+    tags: [backend]
+    note: price_indices/index_prints、跳变复核、已结算 print 不可改
+
+  - id: M005-2
+    milestone: M005
+    name: 指数前后台页与规则文档
+    status: 已完成
+    priority: P0
+    kind: feature
+    tags: [frontend, docs, test]
+    note: Admin/Customer 指数页、seed、docs/指数规则.md、12-index 测试
+
+  - id: M006-1
+    milestone: M006
+    name: 远期合约与现金结算核心
+    status: 已完成
+    priority: P0
+    kind: feature
+    tags: [backend]
+    note: 双边/代理确认、72h 超时、批结算快照、通知钩子
+
+  - id: M006-2
+    milestone: M006
+    name: 持仓账单合约台与沙盘验收
+    status: 已完成
+    priority: P0
+    kind: feature
+    tags: [frontend, docs, test]
+    note: UI、Dashboard 北星、沙盘 1.5X/0.7X、docs/结算规则.md

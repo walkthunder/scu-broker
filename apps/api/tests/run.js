@@ -33,6 +33,8 @@ await import('./cases/08-attachment.js');
 await import('./cases/09-dashboard-security.js');
 await import('./cases/10-v3-market.js');
 await import('./cases/11-v3-ops.js');
+await import('./cases/12-index.js');
+await import('./cases/13-forward-settle.js');
 
 console.log('CompriX Functional Suite');
 console.log('API:', process.env.API_BASE || 'http://127.0.0.1:3000/api');
