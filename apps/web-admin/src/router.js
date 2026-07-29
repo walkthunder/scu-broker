@@ -14,6 +14,7 @@ import DealFeeds from './views/DealFeeds.vue';
 import Indices from './views/Indices.vue';
 import Forwards from './views/Forwards.vue';
 import SettlementBills from './views/SettlementBills.vue';
+import Delivery from './views/Delivery.vue';
 
 const router = createRouter({
   history: createWebHistory('/admin/'),
@@ -31,6 +32,7 @@ const router = createRouter({
         { path: 'indices', component: Indices },
         { path: 'forwards', component: Forwards },
         { path: 'settlement-bills', component: SettlementBills },
+        { path: 'delivery', component: Delivery },
         { path: 'rfqs', component: Rfqs },
         { path: 'orders', component: Orders },
         { path: 'finance', component: Finance },

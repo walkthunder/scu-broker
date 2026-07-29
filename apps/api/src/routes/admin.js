@@ -66,6 +66,8 @@ router.get('/dashboard', ...staff, async (_req, res, next) => {
     let settled_contracts = 0;
     let pending_confirms = 0;
     let pending_index_prints = 0;
+    let delivered_contracts = 0;
+    let physical_ratio_pct = 0;
     try {
       const { dashboardForwardStats } = await import('../services/forward-settle.js');
       const { IndexPrint } = await import('../models/index.js');
@@ -73,6 +75,8 @@ router.get('/dashboard', ...staff, async (_req, res, next) => {
       const fwd = await dashboardForwardStats();
       settled_contracts = fwd.settled_contracts;
       pending_confirms = fwd.pending_confirms;
+      delivered_contracts = fwd.delivered_contracts || 0;
+      physical_ratio_pct = fwd.physical_ratio_pct || 0;
       pending_index_prints = await IndexPrint.count({
         where: {
           date: todayShanghai(),
@@ -92,6 +96,8 @@ router.get('/dashboard', ...staff, async (_req, res, next) => {
       settled_contracts,
       pending_confirms,
       pending_index_prints,
+      delivered_contracts,
+      physical_ratio_pct,
     });
   } catch (e) {
     next(e);
@@ -900,6 +906,88 @@ router.get('/customers', ...staff, async (_req, res, next) => {
       limit: 500,
     });
     ok(res, list);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// —— Physical delivery (M007) ——
+router.get('/delivery-channels', ...staff, async (_req, res, next) => {
+  try {
+    const { listChannels } = await import('../services/delivery.js');
+    ok(res, await listChannels());
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/delivery-channels', ...staff, requireRoles('admin'), async (req, res, next) => {
+  try {
+    const { createChannel } = await import('../services/delivery.js');
+    ok(res, await createChannel(req.body));
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.put('/delivery-channels/:id', ...staff, requireRoles('admin'), async (req, res, next) => {
+  try {
+    const { updateChannel } = await import('../services/delivery.js');
+    ok(res, await updateChannel(req.params.id, req.body));
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/delivery-whitelists', ...staff, async (_req, res, next) => {
+  try {
+    const { listWhitelists } = await import('../services/delivery.js');
+    ok(res, await listWhitelists());
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/delivery-whitelists', ...staff, async (req, res, next) => {
+  try {
+    const { upsertWhitelist } = await import('../services/delivery.js');
+    ok(res, await upsertWhitelist(req.body, req.user.id), '白名单已更新');
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/delivery-orders', ...staff, async (req, res, next) => {
+  try {
+    const { listDeliveryOrders } = await import('../services/delivery.js');
+    ok(res, await listDeliveryOrders(req.query));
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/delivery-orders/:id/approve', ...staff, async (req, res, next) => {
+  try {
+    const { approveDelivery } = await import('../services/delivery.js');
+    ok(res, await approveDelivery(req.params.id, req.user.id, req.body), '已批准');
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/delivery-orders/:id/reject', ...staff, async (req, res, next) => {
+  try {
+    const { rejectDelivery } = await import('../services/delivery.js');
+    ok(res, await rejectDelivery(req.params.id, req.user.id, req.body?.reason), '已驳回');
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/delivery-orders/:id/complete', ...staff, async (req, res, next) => {
+  try {
+    const { completeDelivery } = await import('../services/delivery.js');
+    ok(res, await completeDelivery(req.params.id, req.user.id), '交割完成');
   } catch (e) {
     next(e);
   }

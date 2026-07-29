@@ -24,6 +24,10 @@ onMounted(async () => {
       <el-col :span="8"><el-card shadow="hover">远期待确认<br /><b style="font-size: 28px">{{ data.pending_confirms ?? 0 }}</b></el-card></el-col>
       <el-col :span="8"><el-card shadow="hover">今日待发布指数<br /><b style="font-size: 28px">{{ data.pending_index_prints ?? 0 }}</b></el-card></el-col>
     </el-row>
+    <el-row :gutter="16" style="margin-top: 16px">
+      <el-col :span="8"><el-card shadow="hover">实物交割完结合约<br /><b style="font-size: 28px">{{ data.delivered_contracts ?? 0 }}</b></el-card></el-col>
+      <el-col :span="8"><el-card shadow="hover">实物交割占比 %<br /><b style="font-size: 28px">{{ data.physical_ratio_pct ?? 0 }}</b></el-card></el-col>
+    </el-row>
     <h3 style="margin-top: 24px">最近待处理询价</h3>
     <el-table :data="data.recent_pending" style="margin-top: 8px">
       <el-table-column prop="id" label="询价号" width="90" />

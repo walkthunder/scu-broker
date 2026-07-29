@@ -4,10 +4,11 @@
 
 | 文档 | 用途 |
 |------|------|
-| [docs/PRODUCT_V4_算力远期与对冲.md](docs/PRODUCT_V4_算力远期与对冲.md) | **战略方向：远期合约 / 现金结算 / 交割通道** |
-| [docs/V4_开发需求与设计.md](docs/V4_开发需求与设计.md) | **研发排期：需求 + 设计 + 任务** |
+| [docs/PRODUCT_V4_算力远期与对冲.md](docs/PRODUCT_V4_算力远期与对冲.md) | 战略方向：远期合约 / 现金结算 / 交割通道 |
+| [docs/V4_开发需求与设计.md](docs/V4_开发需求与设计.md) | **领导汇报：开发目标、功能范围与边界、阶段计划** |
 | [docs/指数规则.md](docs/指数规则.md) | 价格指数对客一页纸 |
 | [docs/结算规则.md](docs/结算规则.md) | 远期现金结算对客一页纸 |
+| [docs/交割规则.md](docs/交割规则.md) | 实物交割对客一页纸 |
 | [docs/客户方案.md](docs/客户方案.md) | 对外展示（现货协作） |
 | [docs/CompriX_需求文档_REQUIREMENTS.md](docs/CompriX_需求文档_REQUIREMENTS.md) | 现货需求与验收 |
 | [docs/PRODUCT_V3.md](docs/PRODUCT_V3.md) | 现货技术落地细则 |
@@ -55,9 +56,9 @@ cd apps/web-admin && npm install && npm run dev
 
 ## 已落地能力（摘要）
 
-- **客户**：行情板首屏（热门报价 + Live 30s 轮询 + ticker）、通告、SKU 详情、两步询价（时长档位）、工作台倒计时、报价确认/拒绝；指数 S、远期持仓确认、结算账单
-- **后台**：RFQ/报价/订单五态、财务手记账、附件、通告、SKU 运营字段、成交动态发布、报价过期任务；指数发布、远期开仓/代理确认/批结算、Dashboard 北星（完结合约数）
-- **测试**：`apps/api` 功能套件覆盖 MVP + V3 + V4 指数/现金结算（`12-index` / `13-forward-settle`）；沙盘 `npm run sandbox:forward`
+- **客户**：行情板首屏（热门报价 + Live 30s 轮询 + ticker）、通告、SKU 详情、两步询价（时长档位）、工作台倒计时、报价确认/拒绝；指数 S、远期持仓确认、结算账单、窗口内实物交割申请
+- **后台**：RFQ/报价/订单五态、财务手记账、附件、通告、SKU 运营字段、成交动态发布、报价过期任务；指数发布、远期开仓/代理确认/批结算、交割通道/白名单/工单、Dashboard 北星与实物占比
+- **测试**：`apps/api` 功能套件覆盖现货 + 指数/现金结算/实物交割（`12`/`13`/`14`）；沙盘 `npm run sandbox:forward`
 
 ## 功能测试
 

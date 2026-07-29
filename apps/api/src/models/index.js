@@ -401,6 +401,61 @@ ForwardContract.hasOne(SettlementBill, { foreignKey: 'contract_id', as: 'bill' }
 SettlementBill.belongsTo(ForwardContract, { foreignKey: 'contract_id', as: 'contract' });
 SettlementBill.belongsTo(User, { foreignKey: 'confirmed_by', as: 'confirmer' });
 
+export const DeliveryChannel = sequelize.define(
+  'DeliveryChannel',
+  {
+    id: { type: DataTypes.INTEGER.UNSIGNED, autoIncrement: true, primaryKey: true },
+    supplier_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+    sku_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+    name: { type: DataTypes.STRING(200), allowNull: false },
+    active: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
+  },
+  { tableName: 'delivery_channels' },
+);
+
+export const DeliveryWhitelist = sequelize.define(
+  'DeliveryWhitelist',
+  {
+    id: { type: DataTypes.INTEGER.UNSIGNED, autoIncrement: true, primaryKey: true },
+    user_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false, unique: true },
+    approved_by: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+    active: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
+    note: { type: DataTypes.STRING(255), allowNull: true },
+  },
+  { tableName: 'delivery_whitelists' },
+);
+
+export const DeliveryOrder = sequelize.define(
+  'DeliveryOrder',
+  {
+    id: { type: DataTypes.INTEGER.UNSIGNED, autoIncrement: true, primaryKey: true },
+    contract_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+    channel_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+    status: {
+      type: DataTypes.ENUM('pending', 'approved', 'done', 'rejected'),
+      allowNull: false,
+      defaultValue: 'pending',
+    },
+    order_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+    requested_by: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+    note: { type: DataTypes.TEXT, allowNull: true },
+    reviewed_by: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+    reviewed_at: { type: DataTypes.DATE, allowNull: true },
+    completed_at: { type: DataTypes.DATE, allowNull: true },
+  },
+  { tableName: 'delivery_orders' },
+);
+
+DeliveryChannel.belongsTo(Supplier, { foreignKey: 'supplier_id', as: 'supplier' });
+DeliveryChannel.belongsTo(Sku, { foreignKey: 'sku_id', as: 'sku' });
+DeliveryWhitelist.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+DeliveryWhitelist.belongsTo(User, { foreignKey: 'approved_by', as: 'approver' });
+DeliveryOrder.belongsTo(ForwardContract, { foreignKey: 'contract_id', as: 'contract' });
+ForwardContract.hasMany(DeliveryOrder, { foreignKey: 'contract_id', as: 'delivery_orders' });
+DeliveryOrder.belongsTo(DeliveryChannel, { foreignKey: 'channel_id', as: 'channel' });
+DeliveryOrder.belongsTo(User, { foreignKey: 'requested_by', as: 'requester' });
+DeliveryOrder.belongsTo(Order, { foreignKey: 'order_id', as: 'spot_order' });
+
 export const models = {
   User,
   Sku,
@@ -419,4 +474,7 @@ export const models = {
   IndexPrint,
   ForwardContract,
   SettlementBill,
+  DeliveryChannel,
+  DeliveryWhitelist,
+  DeliveryOrder,
 };

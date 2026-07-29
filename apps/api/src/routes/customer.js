@@ -546,4 +546,32 @@ router.get('/settlement-bills', ...portalAuth, async (req, res, next) => {
   }
 });
 
+router.get('/delivery-channels', ...portalAuth, async (_req, res, next) => {
+  try {
+    const { listChannels } = await import('../services/delivery.js');
+    ok(res, await listChannels({ activeOnly: true }));
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/delivery-whitelist/me', ...portalAuth, async (req, res, next) => {
+  try {
+    const { isUserWhitelisted } = await import('../services/delivery.js');
+    ok(res, { whitelisted: await isUserWhitelisted(req.user.id) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/forwards/:id/delivery-request', ...portalAuth, async (req, res, next) => {
+  try {
+    const { requestDelivery } = await import('../services/delivery.js');
+    const row = await requestDelivery(req.params.id, req.user.id, req.body);
+    ok(res, row, '交割申请已提交');
+  } catch (e) {
+    next(e);
+  }
+});
+
 export default router;

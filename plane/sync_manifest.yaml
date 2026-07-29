@@ -154,3 +154,21 @@ tasks:
     kind: feature
     tags: [frontend, docs, test]
     note: UI、Dashboard 北星、沙盘 1.5X/0.7X、docs/结算规则.md
+
+  - id: M007-1
+    milestone: M007
+    name: 交割通道白名单与工单
+    status: 已完成
+    priority: P0
+    kind: feature
+    tags: [backend]
+    note: channels/whitelists/delivery_orders、T-7～T-0 窗口
+
+  - id: M007-2
+    milestone: M007
+    name: 交割前后台与实物占比
+    status: 已完成
+    priority: P0
+    kind: feature
+    tags: [frontend, docs, test]
+    note: 申请/审核 UI、Dashboard 占比、功能测试

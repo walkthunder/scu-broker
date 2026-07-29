@@ -14,6 +14,7 @@ const menus = [
   { path: '/indices', label: '价格指数' },
   { path: '/forwards', label: '远期合约台' },
   { path: '/settlement-bills', label: '远期结算' },
+  { path: '/delivery', label: '实物交割' },
   { path: '/suppliers', label: '供应商管理' },
   { path: '/rfqs', label: '询价管理' },
   { path: '/orders', label: '订单管理' },

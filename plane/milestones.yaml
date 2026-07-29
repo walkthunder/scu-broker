@@ -88,9 +88,9 @@ milestones:
     name: V4 实物交割通道
     goal: 白名单 + T-7～T-0 窗口 + 工单；实物占比可控
     deliverables: channels/whitelists/delivery_orders、占比看板
-    status: 待开始
+    status: 已完成
     priority: P1
     plan_date: "2026-09-08"
-    actual_date: ""
+    actual_date: "2026-07-29"
     owner: aaron
     tasks: M007

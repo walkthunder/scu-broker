@@ -22,6 +22,7 @@ const contractInclude = [
   { association: 'seller', attributes: ['id', 'name', 'phone', 'company_name', 'email'] },
   { association: 'broker', attributes: ['id', 'name', 'phone'] },
   { association: 'bill' },
+  { association: 'delivery_orders' },
 ];
 
 export function computeCashSettlement({ strike, settlePrice, qty }) {
@@ -41,7 +42,7 @@ export function computeCashSettlement({ strike, settlePrice, qty }) {
 
 export async function presentForward(row, { markToMarket = true } = {}) {
   const j = typeof row.toJSON === 'function' ? row.toJSON() : { ...row };
-  if (markToMarket && j.status === 'open' && j.index_id) {
+  if (markToMarket && j.status === 'open' && j.index_id && j.settle_mode !== 'physical') {
     const print = await getLatestPublished(j.index_id);
     if (print) {
       const mt = computeCashSettlement({
@@ -59,6 +60,13 @@ export async function presentForward(row, { markToMarket = true } = {}) {
     } else {
       j.mtm = null;
     }
+  }
+  try {
+    const { isInDeliveryWindow } = await import('./delivery.js');
+    j.delivery_window_open =
+      j.status === 'open' && isInDeliveryWindow(j.expiry_date);
+  } catch {
+    j.delivery_window_open = false;
   }
   return j;
 }
@@ -235,6 +243,11 @@ export async function settleBatch({ asOf = todayShanghai() } = {}) {
 
   const results = [];
   for (const c of contracts) {
+    const { shouldSkipCashSettle } = await import('./delivery.js');
+    if (await shouldSkipCashSettle(c.id)) {
+      results.push({ contract_id: c.id, ok: false, reason: '已转实物交割或有进行中工单' });
+      continue;
+    }
     let print = await getLatestPublished(c.index_id, c.expiry_date);
     if (!print) {
       results.push({ contract_id: c.id, ok: false, reason: '无可用 published 结算价' });
@@ -330,5 +343,15 @@ export async function dashboardForwardStats() {
     ForwardContract.count({ where: { status: 'settled' } }),
     ForwardContract.count({ where: { status: 'pending_confirm' } }),
   ]);
-  return { settled_contracts, pending_confirms };
+  let delivered_contracts = 0;
+  let physical_ratio_pct = 0;
+  try {
+    const { deliveryRatioStats } = await import('./delivery.js');
+    const ratio = await deliveryRatioStats();
+    delivered_contracts = ratio.delivered_contracts;
+    physical_ratio_pct = ratio.physical_ratio_pct;
+  } catch {
+    /* delivery tables may not exist yet */
+  }
+  return { settled_contracts, pending_confirms, delivered_contracts, physical_ratio_pct };
 }

@@ -10,6 +10,8 @@ import {
   DealFeed,
   PriceIndex,
   IndexPrint,
+  DeliveryChannel,
+  DeliveryWhitelist,
 } from '../src/models/index.js';
 import { todayShanghai, addDaysShanghai } from '../src/utils/market.js';
 
@@ -321,6 +323,40 @@ async function seed() {
       print.settle_price = midToday.price_mid;
       await print.save();
     }
+  }
+
+  // 交割通道：润泽风格示例 + 买方白名单
+  const [runze] = await Supplier.findOrCreate({
+    where: { name: '润泽算力交割通道' },
+    defaults: {
+      name: '润泽算力交割通道',
+      display_name: '润泽通道',
+      contact_name: '通道对接',
+      contact_phone: '13900009999',
+      skus: 'H100 包月',
+      note: '实物交割合作意向方示例',
+    },
+  });
+  await DeliveryChannel.findOrCreate({
+    where: { name: '润泽·H100包月交割' },
+    defaults: {
+      name: '润泽·H100包月交割',
+      supplier_id: runze.id,
+      sku_id: h100m.id,
+      active: true,
+    },
+  });
+  const buyerUser = await User.findOne({ where: { phone: '13900001001' } });
+  if (buyerUser) {
+    await DeliveryWhitelist.findOrCreate({
+      where: { user_id: buyerUser.id },
+      defaults: {
+        user_id: buyerUser.id,
+        active: true,
+        approved_by: admin.id,
+        note: '试运行买方白名单',
+      },
+    });
   }
 
   console.log('Seed done.');
