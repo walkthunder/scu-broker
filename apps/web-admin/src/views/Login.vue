@@ -28,8 +28,8 @@ async function submit() {
     <el-card style="width: 380px">
       <h2 style="margin: 0 0 16px">CompriX 管理后台</h2>
       <el-form @submit.prevent="submit">
-        <el-form-item label="手机号">
-          <el-input v-model="form.phone" />
+        <el-form-item label="手机号 / 邮箱">
+          <el-input v-model="form.phone" placeholder="13800000000 或 admin@comprix.local" />
         </el-form-item>
         <el-form-item label="密码">
           <el-input v-model="form.password" type="password" show-password />

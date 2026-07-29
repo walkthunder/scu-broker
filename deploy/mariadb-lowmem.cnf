@@ -1,0 +1,12 @@
+# 低内存同机：仅影响 MariaDB，不改业务库内容。由 scu 部署写入 /etc/my.cnf.d/
+[mysqld]
+innodb_buffer_pool_size=128M
+innodb_log_buffer_size=8M
+key_buffer_size=16M
+max_connections=40
+table_open_cache=200
+tmp_table_size=16M
+max_heap_table_size=16M
+performance_schema=OFF
+skip-name-resolve
+bind-address=127.0.0.1

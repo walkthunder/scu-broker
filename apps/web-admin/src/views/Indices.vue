@@ -1,7 +1,7 @@
 <script setup>
-import { onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
-import { api } from '../api';
+import { api, getUser } from '../api';
 
 const indices = ref([]);
 const skus = ref([]);
@@ -10,6 +10,7 @@ const prints = ref([]);
 const createVisible = ref(false);
 const form = reactive({ code: '', name: '', sku_id: null, jump_threshold_pct: 20 });
 const printForm = reactive({ date: '', settle_price: null });
+const isAdmin = computed(() => getUser()?.role === 'admin');
 
 async function loadIndices() {
   try {
@@ -113,7 +114,7 @@ async function unpublish(row) {
   <div>
     <div style="display: flex; justify-content: space-between; align-items: center">
       <h2>价格指数</h2>
-      <el-button type="primary" @click="createVisible = true">新建指数</el-button>
+      <el-button v-if="isAdmin" type="primary" @click="createVisible = true">新建指数</el-button>
     </div>
     <el-row :gutter="16" style="margin-top: 12px">
       <el-col :span="8">

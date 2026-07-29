@@ -1,0 +1,18 @@
+[Unit]
+Description=CompriX scu-broker API
+After=network.target mariadb.service
+Wants=mariadb.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/scu-broker/apps/api
+EnvironmentFile=/opt/scu-broker/apps/api/.env
+ExecStart=/usr/local/lib/nodejs/node-v22.12.0/bin/node src/index.js
+Restart=on-failure
+RestartSec=5
+# 低内存同机：限制 API 内存，避免挤垮 Dify
+MemoryMax=512M
+MemoryHigh=400M
+
+[Install]
+WantedBy=multi-user.target

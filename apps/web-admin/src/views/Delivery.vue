@@ -1,7 +1,7 @@
 <script setup>
-import { onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
-import { api } from '../api';
+import { api, getUser } from '../api';
 
 const tab = ref('orders');
 const channels = ref([]);
@@ -15,6 +15,15 @@ const channelForm = reactive({ name: '', supplier_id: null, sku_id: null });
 const channelVisible = ref(false);
 const wlForm = reactive({ user_id: null, active: true, note: '' });
 const wlVisible = ref(false);
+const isAdmin = computed(() => getUser()?.role === 'admin');
+
+const orderStatusLabel = {
+  pending: '待审核',
+  approved: '已批准',
+  rejected: '已驳回',
+  done: '已完成',
+  cancelled: '已取消',
+};
 
 async function load() {
   try {
@@ -127,7 +136,9 @@ const userLabel = (u) =>
         <el-table-column prop="contract_id" label="合约" width="80" />
         <el-table-column label="通道" :formatter="(r) => r.channel?.name" />
         <el-table-column label="申请人" :formatter="(r) => userLabel(r.requester)" />
-        <el-table-column prop="status" label="状态" width="100" />
+        <el-table-column label="状态" width="100">
+          <template #default="{ row }">{{ orderStatusLabel[row.status] || row.status }}</template>
+        </el-table-column>
         <el-table-column label="操作" width="220">
           <template #default="{ row }">
             <template v-if="row.status === 'pending'">
@@ -146,7 +157,12 @@ const userLabel = (u) =>
     </template>
 
     <template v-else-if="tab === 'channels'">
-      <el-button type="primary" style="margin-top: 12px" @click="channelVisible = true">新建通道</el-button>
+      <el-button
+        v-if="isAdmin"
+        type="primary"
+        style="margin-top: 12px"
+        @click="channelVisible = true"
+      >新建通道</el-button>
       <el-table :data="channels" style="margin-top: 12px">
         <el-table-column prop="id" label="ID" width="70" />
         <el-table-column prop="name" label="名称" />
@@ -157,7 +173,7 @@ const userLabel = (u) =>
         </el-table-column>
         <el-table-column label="操作" width="100">
           <template #default="{ row }">
-            <el-button link @click="toggleChannel(row)">{{ row.active ? '停用' : '启用' }}</el-button>
+            <el-button v-if="isAdmin" link @click="toggleChannel(row)">{{ row.active ? '停用' : '启用' }}</el-button>
           </template>
         </el-table-column>
       </el-table>

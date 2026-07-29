@@ -50,9 +50,36 @@ async function ensureDealFeedOrderIdNullable() {
   }
 }
 
+async function ensureOtpCodesEmailSchema() {
+  try {
+    const [cols] = await sequelize.query(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'otp_codes'`,
+    );
+    const names = new Set((cols || []).map((c) => c.COLUMN_NAME));
+    if (names.has('phone') && !names.has('email')) {
+      await sequelize.query('DROP TABLE IF EXISTS `otp_codes`');
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+async function ensureForwardDeliveryPendingStatus() {
+  try {
+    await sequelize.query(
+      "ALTER TABLE `forward_contracts` MODIFY COLUMN `status` ENUM('draft','pending_confirm','open','delivery_pending','settled','delivered','cancelled') NOT NULL DEFAULT 'pending_confirm'",
+    );
+  } catch {
+    /* sync alter may handle */
+  }
+}
+
 async function start() {
   await sequelize.authenticate();
   await ensureDealFeedOrderIdNullable();
+  await ensureOtpCodesEmailSchema();
+  await ensureForwardDeliveryPendingStatus();
   await sequelize.sync({ alter: true });
   app.listen(config.port, () => {
     console.log(`CompriX API listening on :${config.port}`);

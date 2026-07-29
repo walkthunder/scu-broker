@@ -12,6 +12,8 @@ import {
   IndexPrint,
   DeliveryChannel,
   DeliveryWhitelist,
+  SettlementBill,
+  ForwardContract,
 } from '../src/models/index.js';
 import { todayShanghai, addDaysShanghai } from '../src/utils/market.js';
 
@@ -147,12 +149,17 @@ async function seed() {
     skus.push(s);
   }
 
-  // 隐藏测试 SKU
+  // 隐藏测试 SKU（功能测试残留）
   const { Op } = await import('sequelize');
-  const tests = await Sku.findAll({ where: { name: { [Op.like]: 'SKU-T-%' } } });
+  const tests = await Sku.findAll({
+    where: {
+      name: { [Op.or]: [{ [Op.like]: 'SKU-T-%' }, { [Op.like]: 'Hidden-SKU-%' }] },
+    },
+  });
   for (const t of tests) {
     t.is_public = false;
     t.is_hot = false;
+    t.status = 'inactive';
     await t.save();
   }
 
@@ -160,6 +167,7 @@ async function seed() {
   const yesterday = addDaysShanghai(today, -1);
   for (const s of skus) {
     const base = s.type === 'token' ? 8 : s.unit === '月' ? 80000 : 25;
+    // 昨日：仅缺失时写入
     await ReferencePrice.findOrCreate({
       where: { sku_id: s.id, date: yesterday },
       defaults: {
@@ -172,7 +180,8 @@ async function seed() {
         created_by: admin.id,
       },
     });
-    await ReferencePrice.findOrCreate({
+    // 今日：对齐种子基准，保证演示价可信（幂等刷新）
+    const [todayRef] = await ReferencePrice.findOrCreate({
       where: { sku_id: s.id, date: today },
       defaults: {
         sku_id: s.id,
@@ -184,6 +193,11 @@ async function seed() {
         created_by: admin.id,
       },
     });
+    todayRef.price_low = base * 0.8;
+    todayRef.price_mid = base;
+    todayRef.price_high = base * 1.3;
+    todayRef.source = '人工录入';
+    await todayRef.save();
   }
 
   const suppliers = [
@@ -277,55 +291,109 @@ async function seed() {
     }
   }
 
-  // 远期对冲双方（前台可登录）
+  // 远期对冲双方（邮箱密码登录）
+  const customerPass = await bcrypt.hash('Pass1234!', 10);
   for (const c of [
-    { phone: '13900001001', name: '买方·星云AI', company_name: '星云智能' },
-    { phone: '13900001002', name: '卖方·云海算力', company_name: '云海算力' },
+    {
+      phone: '13900001001',
+      email: 'buyer@comprix.local',
+      name: '买方·星云AI',
+      company_name: '星云智能',
+    },
+    {
+      phone: '13900001002',
+      email: 'seller@comprix.local',
+      name: '卖方·云海算力',
+      company_name: '云海算力',
+    },
   ]) {
-    await User.findOrCreate({
-      where: { phone: c.phone },
+    const [u] = await User.findOrCreate({
+      where: { email: c.email },
       defaults: {
         phone: c.phone,
+        email: c.email,
         name: c.name,
         company_name: c.company_name,
         role: 'customer',
-        email: `${c.phone}@comprix.local`,
+        password_hash: customerPass,
       },
     });
-  }
-
-  // 首发指数：锚定 H100 包月
-  const h100m = skus.find((s) => s.name === 'H100 包月') || skus[0];
-  const [idx] = await PriceIndex.findOrCreate({
-    where: { code: 'H100-M' },
-    defaults: {
-      code: 'H100-M',
-      name: 'H100 包月结算指数',
-      sku_id: h100m.id,
-      status: 'active',
-      jump_threshold_pct: 20,
-    },
-  });
-  const midToday = await ReferencePrice.findOne({ where: { sku_id: h100m.id, date: today } });
-  if (midToday) {
-    const [print] = await IndexPrint.findOrCreate({
-      where: { index_id: idx.id, date: today },
-      defaults: {
-        index_id: idx.id,
-        date: today,
-        settle_price: midToday.price_mid,
-        source: 'price_mid',
-        status: 'published',
-      },
-    });
-    if (print.status !== 'published') {
-      print.status = 'published';
-      print.settle_price = midToday.price_mid;
-      await print.save();
+    if (!u.password_hash) {
+      u.password_hash = customerPass;
+      u.email = c.email;
+      await u.save();
     }
   }
 
-  // 交割通道：润泽风格示例 + 买方白名单
+  // 价格指数：多标的（锚定现有 SKU，当日 mid → 已发布 S）
+  const indexDefs = [
+    { code: 'H100-M', name: 'H100 包月结算指数', skuName: 'H100 包月', jump: 20 },
+    { code: 'H100-H', name: 'H100 时租结算指数', skuName: 'H100', jump: 20 },
+    { code: 'H800-H', name: 'H800 时租结算指数', skuName: 'H800', jump: 20 },
+    { code: 'A100-H', name: 'A100 时租结算指数', skuName: 'A100', jump: 25 },
+    { code: 'GPT-T', name: 'GPT Token 结算指数', skuName: 'GPT Token', jump: 30 },
+    { code: 'DS-T', name: 'DeepSeek Token 结算指数', skuName: 'DeepSeek Token', jump: 30 },
+  ];
+  const seededIndices = [];
+  for (const def of indexDefs) {
+    const sku = skus.find((s) => s.name === def.skuName);
+    if (!sku) {
+      console.warn(`skip index ${def.code}: missing SKU ${def.skuName}`);
+      continue;
+    }
+    const [idx] = await PriceIndex.findOrCreate({
+      where: { code: def.code },
+      defaults: {
+        code: def.code,
+        name: def.name,
+        sku_id: sku.id,
+        status: 'active',
+        jump_threshold_pct: def.jump,
+      },
+    });
+    if (idx.sku_id !== sku.id || idx.status !== 'active' || idx.name !== def.name) {
+      idx.sku_id = sku.id;
+      idx.name = def.name;
+      idx.status = 'active';
+      idx.jump_threshold_pct = def.jump;
+      await idx.save();
+    }
+    const midToday = await ReferencePrice.findOne({ where: { sku_id: sku.id, date: today } });
+    if (midToday) {
+      const [print] = await IndexPrint.findOrCreate({
+        where: { index_id: idx.id, date: today },
+        defaults: {
+          index_id: idx.id,
+          date: today,
+          settle_price: midToday.price_mid,
+          source: 'price_mid',
+          status: 'published',
+        },
+      });
+      // 当日未锁定则对齐 mid 并发布（保证演示数据可信）
+      const used = await SettlementBill.findOne({
+        where: { settle_price_date: today },
+        include: [
+          {
+            model: ForwardContract,
+            as: 'contract',
+            required: true,
+            where: { index_id: idx.id },
+            attributes: ['id'],
+          },
+        ],
+      }).catch(() => null);
+      if (!used && (print.status !== 'published' || Number(print.settle_price) !== Number(midToday.price_mid))) {
+        print.settle_price = midToday.price_mid;
+        print.source = 'price_mid';
+        print.status = 'published';
+        await print.save();
+      }
+    }
+    seededIndices.push({ idx, sku });
+  }
+
+  // 交割通道：主流 GPU 包月/时租各一条示例
   const [runze] = await Supplier.findOrCreate({
     where: { name: '润泽算力交割通道' },
     defaults: {
@@ -333,28 +401,38 @@ async function seed() {
       display_name: '润泽通道',
       contact_name: '通道对接',
       contact_phone: '13900009999',
-      skus: 'H100 包月',
+      skus: 'H100 包月,H100,H800',
       note: '实物交割合作意向方示例',
     },
   });
-  await DeliveryChannel.findOrCreate({
-    where: { name: '润泽·H100包月交割' },
-    defaults: {
-      name: '润泽·H100包月交割',
-      supplier_id: runze.id,
-      sku_id: h100m.id,
-      active: true,
-    },
-  });
-  const buyerUser = await User.findOne({ where: { phone: '13900001001' } });
-  if (buyerUser) {
-    await DeliveryWhitelist.findOrCreate({
-      where: { user_id: buyerUser.id },
+  const channelDefs = [
+    { name: '润泽·H100包月交割', skuName: 'H100 包月' },
+    { name: '润泽·H100时租交割', skuName: 'H100' },
+    { name: '润泽·H800时租交割', skuName: 'H800' },
+  ];
+  for (const cd of channelDefs) {
+    const sku = skus.find((s) => s.name === cd.skuName);
+    if (!sku) continue;
+    await DeliveryChannel.findOrCreate({
+      where: { name: cd.name },
       defaults: {
-        user_id: buyerUser.id,
+        name: cd.name,
+        supplier_id: runze.id,
+        sku_id: sku.id,
+        active: true,
+      },
+    });
+  }
+  for (const email of ['buyer@comprix.local', 'seller@comprix.local']) {
+    const u = await User.findOne({ where: { email } });
+    if (!u) continue;
+    await DeliveryWhitelist.findOrCreate({
+      where: { user_id: u.id },
+      defaults: {
+        user_id: u.id,
         active: true,
         approved_by: admin.id,
-        note: '试运行买方白名单',
+        note: `试运行白名单（${email}）`,
       },
     });
   }
@@ -362,7 +440,11 @@ async function seed() {
   console.log('Seed done.');
   console.log(`Admin login: ${config.admin.phone} / ${config.admin.password}`);
   console.log('Broker login: 13800000001 / broker123');
-  console.log('Forward parties OTP: 13900001001 / 13900001002');
+  console.log('Customer: buyer@comprix.local / Pass1234!  (seller@comprix.local，均已开通交割白名单)');
+  console.log(
+    'Indices:',
+    seededIndices.map((x) => x.idx.code).join(', ') || '(none)',
+  );
   process.exit(0);
 }
 

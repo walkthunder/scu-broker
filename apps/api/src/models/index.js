@@ -5,10 +5,10 @@ export const User = sequelize.define(
   'User',
   {
     id: { type: DataTypes.INTEGER.UNSIGNED, autoIncrement: true, primaryKey: true },
-    phone: { type: DataTypes.STRING(20), allowNull: false, unique: true },
+    phone: { type: DataTypes.STRING(20), allowNull: true, unique: true },
     name: { type: DataTypes.STRING(100), allowNull: true },
     company_name: { type: DataTypes.STRING(200), allowNull: true },
-    email: { type: DataTypes.STRING(200), allowNull: true },
+    email: { type: DataTypes.STRING(200), allowNull: true, unique: true },
     password_hash: { type: DataTypes.STRING(200), allowNull: true },
     role: {
       type: DataTypes.ENUM('customer', 'broker', 'admin'),
@@ -209,7 +209,12 @@ export const OtpCode = sequelize.define(
   'OtpCode',
   {
     id: { type: DataTypes.INTEGER.UNSIGNED, autoIncrement: true, primaryKey: true },
-    phone: { type: DataTypes.STRING(20), allowNull: false },
+    email: { type: DataTypes.STRING(200), allowNull: false },
+    purpose: {
+      type: DataTypes.ENUM('register', 'reset'),
+      allowNull: false,
+      defaultValue: 'register',
+    },
     code: { type: DataTypes.STRING(10), allowNull: false },
     expires_at: { type: DataTypes.DATE, allowNull: false },
     used: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
@@ -342,6 +347,7 @@ export const ForwardContract = sequelize.define(
         'draft',
         'pending_confirm',
         'open',
+        'delivery_pending',
         'settled',
         'delivered',
         'cancelled',

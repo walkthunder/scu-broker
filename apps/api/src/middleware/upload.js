@@ -21,5 +21,6 @@ export const upload = multer({
 });
 
 export function publicUploadPath(filename) {
-  return `/uploads/${path.basename(filename)}`;
+  const prefix = config.publicPathPrefix || '';
+  return `${prefix}/uploads/${path.basename(filename)}`;
 }

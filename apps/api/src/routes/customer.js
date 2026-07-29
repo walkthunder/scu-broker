@@ -23,6 +23,9 @@ import {
   isTestSkuName,
   calcChange,
 } from '../utils/market.js';
+import forwardsRoutes from './customer-forwards.js';
+import { listPublishedDealFeeds } from '../services/deal-feed.js';
+import { DealFeed } from '../models/index.js';
 
 const router = Router();
 const portalAuth = [authRequired, requireRoles('customer', 'broker', 'admin')];
@@ -131,7 +134,6 @@ router.get('/market-pulse', async (_req, res, next) => {
     const date = todayShanghai();
     const priced = await ReferencePrice.count({ where: { date } });
     const pending = await Rfq.count({ where: { status: 'pending' } });
-    const { DealFeed } = await import('../models/index.js');
     const feedCount = await DealFeed.count({ where: { is_published: true } });
     const latestPrice = await ReferencePrice.findOne({
       where: { date },
@@ -154,7 +156,6 @@ router.get('/market-pulse', async (_req, res, next) => {
 
 router.get('/deal-feeds', async (_req, res, next) => {
   try {
-    const { listPublishedDealFeeds } = await import('../services/deal-feed.js');
     ok(res, await listPublishedDealFeeds(20));
   } catch (e) {
     next(e);
@@ -480,98 +481,7 @@ router.get('/orders/:id', ...portalAuth, async (req, res, next) => {
   }
 });
 
-// —— V4 indices / forwards / bills ——
-router.get('/indices', async (_req, res, next) => {
-  try {
-    const { listIndices, getLatestPublished } = await import('../services/index-price.js');
-    const list = await listIndices({ activeOnly: true });
-    const out = [];
-    for (const idx of list) {
-      const j = idx.toJSON();
-      const latest = await getLatestPublished(idx.id);
-      j.latest_published = latest
-        ? { date: latest.date, settle_price: Number(latest.settle_price) }
-        : null;
-      out.push(j);
-    }
-    ok(res, out);
-  } catch (e) {
-    next(e);
-  }
-});
 
-router.get('/indices/:id/prints', async (req, res, next) => {
-  try {
-    const { listPrints } = await import('../services/index-price.js');
-    const prints = await listPrints(req.params.id, { from: req.query.from, to: req.query.to });
-    ok(
-      res,
-      prints
-        .filter((p) => p.status === 'published')
-        .map((p) => ({
-          date: p.date,
-          settle_price: Number(p.settle_price),
-          source: p.source,
-        })),
-    );
-  } catch (e) {
-    next(e);
-  }
-});
-
-router.get('/forwards', ...portalAuth, async (req, res, next) => {
-  try {
-    const { listForwardsForUser } = await import('../services/forward-settle.js');
-    ok(res, await listForwardsForUser(req.user.id));
-  } catch (e) {
-    next(e);
-  }
-});
-
-router.post('/forwards/:id/confirm', ...portalAuth, async (req, res, next) => {
-  try {
-    const { confirmForward } = await import('../services/forward-settle.js');
-    ok(res, await confirmForward(req.params.id, req.user.id), '已确认');
-  } catch (e) {
-    next(e);
-  }
-});
-
-router.get('/settlement-bills', ...portalAuth, async (req, res, next) => {
-  try {
-    const { listBillsForUser } = await import('../services/forward-settle.js');
-    ok(res, await listBillsForUser(req.user.id));
-  } catch (e) {
-    next(e);
-  }
-});
-
-router.get('/delivery-channels', ...portalAuth, async (_req, res, next) => {
-  try {
-    const { listChannels } = await import('../services/delivery.js');
-    ok(res, await listChannels({ activeOnly: true }));
-  } catch (e) {
-    next(e);
-  }
-});
-
-router.get('/delivery-whitelist/me', ...portalAuth, async (req, res, next) => {
-  try {
-    const { isUserWhitelisted } = await import('../services/delivery.js');
-    ok(res, { whitelisted: await isUserWhitelisted(req.user.id) });
-  } catch (e) {
-    next(e);
-  }
-});
-
-router.post('/forwards/:id/delivery-request', ...portalAuth, async (req, res, next) => {
-  try {
-    const { requestDelivery } = await import('../services/delivery.js');
-    const row = await requestDelivery(req.params.id, req.user.id, req.body);
-    ok(res, row, '交割申请已提交');
-  } catch (e) {
-    next(e);
-  }
-});
+router.use(forwardsRoutes);
 
 export default router;

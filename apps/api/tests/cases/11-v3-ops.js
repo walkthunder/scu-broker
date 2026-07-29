@@ -1,12 +1,12 @@
 import { describe } from '../lib/runner.js';
 import { req } from '../lib/http.js';
 import { assert, assertOk, assertFail, assertEq } from '../lib/assert.js';
-import { customerLogin, adminLogin, brokerLogin, auth } from '../lib/auth.js';
+import { customerLogin, ensureCustomer, adminLogin, auth, brokerLogin } from '../lib/auth.js';
 import { forceQuoteExpiry } from '../lib/db.js';
 
 async function flowToCompleted() {
-  const phone = `131${String(Date.now()).slice(-8)}`;
-  const { token: ctoken } = await customerLogin(phone, { company_name: '成交动态公司' });
+  const email = `u${Date.now()}@test.local`;
+  const { token: ctoken } = await ensureCustomer(email, 'Pass1234!', { company_name: '成交动态公司' });
   const skus = await req('/customer/skus');
   const rfq = await req('/customer/rfqs', {
     method: 'POST',
@@ -59,7 +59,7 @@ async function flowToCompleted() {
 
 describe('V3 运营 / 询价报价增强', ({ it }) => {
   it('RFQ 记录 submit_page 与 sla_deadline', ['V3-A-RFQ'], async () => {
-    const { token } = await customerLogin(`130${String(Date.now()).slice(-8)}`, {
+    const { token } = await ensureCustomer(`u${Date.now()}@test.local`, 'Pass1234!', {
       company_name: 'SLA公司',
     });
     const skus = await req('/customer/skus');
@@ -78,8 +78,8 @@ describe('V3 运营 / 询价报价增强', ({ it }) => {
   });
 
   it('报价含 customer_view_note 与 remaining_seconds', ['V3-A-QUOTE'], async () => {
-    const phone = `129${String(Date.now()).slice(-8)}`;
-    const { token: ctoken } = await customerLogin(phone, { company_name: '留言公司' });
+    const email = `u${Date.now()}@test.local`;
+    const { token: ctoken } = await ensureCustomer(email, 'Pass1234!', { company_name: '留言公司' });
     const skus = await req('/customer/skus');
     const rfq = await req('/customer/rfqs', {
       method: 'POST',
@@ -119,8 +119,8 @@ describe('V3 运营 / 询价报价增强', ({ it }) => {
   });
 
   it('客户拒绝可写 reject_reason', ['V3-A-QUOTE'], async () => {
-    const phone = `128${String(Date.now()).slice(-8)}`;
-    const { token: ctoken } = await customerLogin(phone, { company_name: '拒绝公司' });
+    const email = `u${Date.now()}@test.local`;
+    const { token: ctoken } = await ensureCustomer(email, 'Pass1234!', { company_name: '拒绝公司' });
     const skus = await req('/customer/skus');
     const rfq = await req('/customer/rfqs', {
       method: 'POST',
@@ -158,8 +158,8 @@ describe('V3 运营 / 询价报价增强', ({ it }) => {
   });
 
   it('过期任务把 pending 报价标 expired', ['V3-A-EXPIRE'], async () => {
-    const phone = `127${String(Date.now()).slice(-8)}`;
-    const { token: ctoken } = await customerLogin(phone, { company_name: '过期公司' });
+    const email = `u${Date.now()}@test.local`;
+    const { token: ctoken } = await ensureCustomer(email, 'Pass1234!', { company_name: '过期公司' });
     const skus = await req('/customer/skus');
     const rfq = await req('/customer/rfqs', {
       method: 'POST',

@@ -4,10 +4,10 @@ import path from 'path';
 import { describe } from '../lib/runner.js';
 import { req, BASE } from '../lib/http.js';
 import { assert, assertOk } from '../lib/assert.js';
-import { customerLogin, adminLogin, auth } from '../lib/auth.js';
+import { customerLogin, ensureCustomer, adminLogin, auth } from '../lib/auth.js';
 
 async function setupQuoteAndOrder() {
-  const { token: ctoken } = await customerLogin(`130${String(Date.now()).slice(-8)}`);
+  const { token: ctoken } = await ensureCustomer(`u${Date.now()}@test.local`);
   const skus = await req('/customer/skus');
   const rfq = await req('/customer/rfqs', {
     method: 'POST',
@@ -60,7 +60,7 @@ describe('附件', ({ it }) => {
   it('报价附件可上传并可查询', ['R-P1-7', 'R-ACCEPT-4'], async () => {
     const ctx = await setupQuoteAndOrder();
     // 新开一条仅有报价的链路上传 quote 附件
-    const { token: ctoken } = await customerLogin(`129${String(Date.now()).slice(-8)}`);
+    const { token: ctoken } = await ensureCustomer(`u${Date.now()}@test.local`);
     const skus = await req('/customer/skus');
     const rfq = await req('/customer/rfqs', {
       method: 'POST',

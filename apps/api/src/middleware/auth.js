@@ -5,7 +5,7 @@ import { User } from '../models/index.js';
 
 export function signToken(user) {
   return jwt.sign(
-    { id: user.id, role: user.role, phone: user.phone },
+    { id: user.id, role: user.role, email: user.email || null },
     config.jwtSecret,
     { expiresIn: config.jwtExpiresIn },
   );

@@ -12,9 +12,10 @@ import About from './views/About.vue';
 import Indices from './views/Indices.vue';
 import Forwards from './views/Forwards.vue';
 import Bills from './views/Bills.vue';
+import Account from './views/Account.vue';
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     { path: '/', name: 'prices', component: Prices },
     { path: '/sku/:id', name: 'sku-detail', component: SkuDetail },
@@ -22,6 +23,7 @@ const router = createRouter({
     { path: '/rfq', name: 'rfq', component: RfqForm, meta: { auth: true } },
     { path: '/rfq/success', name: 'rfq-success', component: RfqSuccess, meta: { auth: true } },
     { path: '/mine', name: 'mine', component: MyOrders, meta: { auth: true } },
+    { path: '/account', name: 'account', component: Account, meta: { auth: true } },
     { path: '/rfqs/:id', name: 'rfq-detail', component: RfqDetail, meta: { auth: true } },
     { path: '/orders/:id', name: 'order-detail', component: OrderDetail, meta: { auth: true } },
     { path: '/indices', name: 'indices', component: Indices },

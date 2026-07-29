@@ -21,6 +21,8 @@ export const config = {
   uploadDir: path.resolve(
     process.env.UPLOAD_DIR || path.join(__dirname, '../../../uploads'),
   ),
+  /** 公网路径前缀，如 `/scu`；空表示根路径部署 */
+  publicPathPrefix: String(process.env.PUBLIC_PATH_PREFIX || '').replace(/\/$/, ''),
   smtp: {
     host: process.env.SMTP_HOST || '',
     port: Number(process.env.SMTP_PORT || 465),

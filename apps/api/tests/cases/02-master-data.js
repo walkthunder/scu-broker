@@ -1,7 +1,7 @@
 import { describe } from '../lib/runner.js';
 import { req } from '../lib/http.js';
 import { assert, assertOk, assertFail, assertEq } from '../lib/assert.js';
-import { adminLogin, brokerLogin, auth } from '../lib/auth.js';
+import { adminLogin, auth, brokerLogin } from '../lib/auth.js';
 
 describe('主数据 SKU/供应商', ({ it }) => {
   it('Admin 可 CRUD SKU', ['R-P0-2', 'R-GAP-SKU'], async () => {

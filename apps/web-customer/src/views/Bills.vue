@@ -23,7 +23,10 @@ onMounted(load);
 <template>
   <div class="mx-auto max-w-6xl px-4 py-8">
     <h1 class="page-title">远期结算账单</h1>
-    <p class="page-desc">差价按 (S−X)×数量；方向以「应收 / 应付」标注。线下收付后由 Broker 确认。</p>
+    <p class="page-desc">
+      差价按 (S−X)×数量；方向以「应收 / 应付」标注。线下收付后由 Broker 确认。规则见
+      <router-link to="/about#settle-rules" class="text-amber-400 hover:underline">结算规则</router-link>。
+    </p>
     <p v-if="err" class="mt-4 text-sm text-rose-400">{{ err }}</p>
     <div class="panel mt-6 overflow-hidden">
       <p v-if="loading" class="p-4 text-sm text-slate-500">加载中…</p>
@@ -62,7 +65,14 @@ onMounted(load);
             <td>{{ row.pay_status === 'done' ? '已收付' : '待确认' }}</td>
           </tr>
           <tr v-if="!list.length">
-            <td colspan="7" class="py-8 text-center text-slate-500">暂无账单</td>
+            <td colspan="7" class="py-10 text-center text-slate-500">
+              <p>暂无结算账单</p>
+              <p class="mt-2 text-xs text-slate-600">
+                合约到期现金结算后会出现在这里。可先到
+                <router-link to="/forwards" class="text-amber-400 hover:underline">持仓</router-link>
+                查看合约状态。
+              </p>
+            </td>
           </tr>
         </tbody>
       </table>

@@ -1,14 +1,14 @@
 import { describe } from '../lib/runner.js';
 import { req } from '../lib/http.js';
 import { assert, assertOk, assertFail } from '../lib/assert.js';
-import { adminLogin, customerLogin, auth } from '../lib/auth.js';
+import { customerLogin, adminLogin, auth } from '../lib/auth.js';
 import { todayShanghai, addDaysShanghai } from '../../src/utils/market.js';
 
 describe('M007 实物交割', ({ it }) => {
   it('白名单+窗口内可申请并完成交割', ['V4-C1', 'V4-C3', 'V4-C4'], async () => {
     const { token: adminToken } = await adminLogin();
-    const buyer = await customerLogin('13900001001');
-    const seller = await customerLogin('13900001002');
+    const buyer = await customerLogin('buyer@comprix.local');
+    const seller = await customerLogin('seller@comprix.local');
 
     const idxList = await req('/admin/indices', { headers: auth(adminToken) });
     assertOk(idxList);
@@ -91,8 +91,8 @@ describe('M007 实物交割', ({ it }) => {
 
   it('窗口外或非白名单拒绝申请', ['V4-C2', 'V4-C3'], async () => {
     const { token: adminToken } = await adminLogin();
-    const buyer = await customerLogin('13900001001');
-    const seller = await customerLogin('13900001002');
+    const buyer = await customerLogin('buyer@comprix.local');
+    const seller = await customerLogin('seller@comprix.local');
     const idxList = await req('/admin/indices', { headers: auth(adminToken) });
     const idx = idxList.json.data[0];
     const channels = await req('/admin/delivery-channels', { headers: auth(adminToken) });

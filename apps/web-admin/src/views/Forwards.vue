@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { api } from '../api';
 
@@ -22,7 +22,10 @@ const form = reactive({
 const proxyForm = reactive({ side: 'seller', note: '' });
 
 const userLabel = (u) =>
-  u ? `${u.company_name || u.name || '用户'} (#${u.id} ${u.phone})` : '';
+  u ? `${u.company_name || u.name || '用户'} (#${u.id} ${u.email || u.phone || ''})` : '';
+
+const selectedIndex = computed(() => indices.value.find((i) => i.id === form.index_id));
+const canOpenSelected = computed(() => !!selectedIndex.value?.latest_published);
 
 async function load() {
   try {
@@ -41,14 +44,23 @@ async function load() {
 
 onMounted(load);
 
+watch(
+  () => form.index_id,
+  (id) => {
+    const idx = indices.value.find((i) => i.id === id);
+    if (idx?.sku?.unit) form.unit = idx.sku.unit;
+  },
+);
+
 function openCreate() {
+  const firstReady = indices.value.find((i) => i.status === 'active' && i.latest_published);
   Object.assign(form, {
-    index_id: indices.value[0]?.id || null,
+    index_id: firstReady?.id || null,
     buyer_id: null,
     seller_id: null,
     qty: 1,
-    unit: '月',
-    strike_price: null,
+    unit: firstReady?.sku?.unit || '月',
+    strike_price: firstReady?.latest_published?.settle_price ?? null,
     expiry_date: '',
     note: '',
   });
@@ -56,6 +68,10 @@ function openCreate() {
 }
 
 async function create() {
+  if (!canOpenSelected.value) {
+    ElMessage.warning('请选择已有已发布结算价 S 的指数');
+    return;
+  }
   try {
     await api('/admin/forwards', { method: 'POST', body: { ...form } });
     ElMessage.success('已开仓，待确认');
@@ -107,11 +123,23 @@ async function settleBatch() {
   try {
     const r = await api('/admin/forwards/settle-batch', { method: 'POST', body: {} });
     const rows = r.data || [];
-    const okN = rows.filter((x) => x.ok).length;
-    const failN = rows.length - okN;
-    ElMessage.success(
-      failN ? `批结算成功 ${okN} 笔，跳过/失败 ${failN} 笔` : `批结算成功 ${okN} 笔`,
-    );
+    const okRows = rows.filter((x) => x.ok);
+    const failRows = rows.filter((x) => !x.ok);
+    if (!rows.length) {
+      ElMessage.info('无可结算合约');
+    } else if (!failRows.length) {
+      ElMessage.success(`批结算成功 ${okRows.length} 笔`);
+    } else {
+      const detail = failRows
+        .map((x) => `#${x.contract_id}: ${x.reason || '失败'}`)
+        .slice(0, 12)
+        .join('\n');
+      await ElMessageBox.alert(
+        `成功 ${okRows.length} 笔，跳过/失败 ${failRows.length} 笔\n\n${detail}`,
+        '批结算结果',
+        { confirmButtonText: '知道了' },
+      );
+    }
     await load();
   } catch (e) {
     ElMessage.error(e.message);
@@ -131,11 +159,16 @@ async function expireConfirms() {
 const statusLabel = computed(() => ({
   pending_confirm: '待确认',
   open: '持仓中',
+  delivery_pending: '交割中',
   settled: '已结算',
   cancelled: '已取消',
   delivered: '已交割',
   draft: '草稿',
 }));
+
+function confirmMark(at) {
+  return at ? '已确认' : '待确认';
+}
 </script>
 
 <template>
@@ -156,10 +189,16 @@ const statusLabel = computed(() => ({
       <el-table-column prop="strike_price" label="X" width="90" />
       <el-table-column prop="qty" label="数量" width="80" />
       <el-table-column prop="expiry_date" label="到期日" width="120" />
+      <el-table-column label="买方确认" width="90">
+        <template #default="{ row }">{{ confirmMark(row.buyer_confirmed_at) }}</template>
+      </el-table-column>
+      <el-table-column label="卖方确认" width="90">
+        <template #default="{ row }">{{ confirmMark(row.seller_confirmed_at) }}</template>
+      </el-table-column>
       <el-table-column label="状态" width="100">
         <template #default="{ row }">{{ statusLabel[row.status] || row.status }}</template>
       </el-table-column>
-      <el-table-column label="浮动盈亏" min-width="120">
+      <el-table-column label="浮动盈亏" min-width="140">
         <template #default="{ row }">
           <span v-if="row.mtm">{{ row.mtm.signed_amount }}（{{ row.mtm.note }}）</span>
           <span v-else>—</span>
@@ -179,8 +218,21 @@ const statusLabel = computed(() => ({
       <el-form label-width="100px">
         <el-form-item label="指数">
           <el-select v-model="form.index_id" style="width: 100%">
-            <el-option v-for="i in indices" :key="i.id" :label="`${i.code} ${i.name}`" :value="i.id" />
+            <el-option
+              v-for="i in indices"
+              :key="i.id"
+              :label="
+                i.latest_published
+                  ? `${i.code} ${i.name}（S=${i.latest_published.settle_price}）`
+                  : `${i.code} ${i.name}（无已发布 S）`
+              "
+              :value="i.id"
+              :disabled="i.status !== 'active' || !i.latest_published"
+            />
           </el-select>
+          <div v-if="form.index_id && !canOpenSelected" style="color: #f56c6c; font-size: 12px; margin-top: 4px">
+            该指数尚无已发布结算价，请先到「价格指数」发布后再开仓
+          </div>
         </el-form-item>
         <el-form-item label="买方">
           <el-select v-model="form.buyer_id" filterable style="width: 100%">
@@ -202,7 +254,7 @@ const statusLabel = computed(() => ({
       </el-form>
       <template #footer>
         <el-button @click="visible = false">取消</el-button>
-        <el-button type="primary" @click="create">提交</el-button>
+        <el-button type="primary" :disabled="!canOpenSelected" @click="create">提交</el-button>
       </template>
     </el-dialog>
 

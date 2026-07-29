@@ -20,6 +20,8 @@ export function clearAuth() {
   localStorage.removeItem(USER_KEY);
 }
 
+const API_BASE = import.meta.env.VITE_API_BASE || '/api';
+
 export async function api(path, options = {}) {
   const headers = { ...(options.headers || {}) };
   if (!(options.body instanceof FormData)) {
@@ -27,7 +29,7 @@ export async function api(path, options = {}) {
   }
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, {
+  const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers,
     body:

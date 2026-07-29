@@ -12,6 +12,7 @@ import {
   Payment,
   Attachment,
   Announcement,
+  IndexPrint,
 } from '../models/index.js';
 import { authRequired, requireRoles } from '../middleware/auth.js';
 import { upload, publicUploadPath } from '../middleware/upload.js';
@@ -21,6 +22,11 @@ import {
   assertOrderTransition,
   ORDER_STATUS_TIMESTAMPS,
 } from '../services/order-state.js';
+import forwardsRoutes from './admin-forwards.js';
+import { dashboardForwardStats } from '../services/forward-settle.js';
+import { todayShanghai } from '../utils/market.js';
+import { expirePendingQuotes, ensureDealFeedDraft } from '../services/deal-feed.js';
+import { DealFeed } from '../models/index.js';
 
 const router = Router();
 const staff = [authRequired, requireRoles('broker', 'admin')];
@@ -63,29 +69,17 @@ router.get('/dashboard', ...staff, async (_req, res, next) => {
       limit: 5,
     });
 
-    let settled_contracts = 0;
-    let pending_confirms = 0;
-    let pending_index_prints = 0;
-    let delivered_contracts = 0;
-    let physical_ratio_pct = 0;
-    try {
-      const { dashboardForwardStats } = await import('../services/forward-settle.js');
-      const { IndexPrint } = await import('../models/index.js');
-      const { todayShanghai } = await import('../utils/market.js');
-      const fwd = await dashboardForwardStats();
-      settled_contracts = fwd.settled_contracts;
-      pending_confirms = fwd.pending_confirms;
-      delivered_contracts = fwd.delivered_contracts || 0;
-      physical_ratio_pct = fwd.physical_ratio_pct || 0;
-      pending_index_prints = await IndexPrint.count({
-        where: {
-          date: todayShanghai(),
-          status: { [Op.in]: ['draft', 'pending_review'] },
-        },
-      });
-    } catch {
-      /* tables may not exist yet before sync */
-    }
+    const fwd = await dashboardForwardStats();
+    const settled_contracts = fwd.settled_contracts;
+    const pending_confirms = fwd.pending_confirms;
+    const delivered_contracts = fwd.delivered_contracts || 0;
+    const physical_ratio_pct = fwd.physical_ratio_pct || 0;
+    const pending_index_prints = await IndexPrint.count({
+      where: {
+        date: todayShanghai(),
+        status: { [Op.in]: ['draft', 'pending_review'] },
+      },
+    });
 
     ok(res, {
       today_rfqs: todayRfqs,
@@ -484,7 +478,6 @@ router.put('/orders/:id/status', ...staff, async (req, res, next) => {
       is_customer_visible: !!is_customer_visible,
     });
     if (status === '已完成') {
-      const { ensureDealFeedDraft } = await import('../services/deal-feed.js');
       await ensureDealFeedDraft(order.id);
     }
     ok(res, order);
@@ -700,7 +693,6 @@ router.delete('/announcements/:id', ...staff, requireRoles('admin'), async (req,
 // —— Deal feeds ——
 router.get('/deal-feeds', ...staff, async (req, res, next) => {
   try {
-    const { DealFeed } = await import('../models/index.js');
     const where = {};
     if (req.query.published === 'true') where.is_published = true;
     if (req.query.published === 'false') where.is_published = false;
@@ -712,7 +704,6 @@ router.get('/deal-feeds', ...staff, async (req, res, next) => {
 
 router.post('/deal-feeds/:id/publish', ...staff, async (req, res, next) => {
   try {
-    const { DealFeed } = await import('../models/index.js');
     const row = await DealFeed.findByPk(req.params.id);
     if (!row) throw new AppError('动态不存在', 404);
     if (req.body.region) row.region = String(req.body.region).slice(0, 50);
@@ -730,7 +721,6 @@ router.post('/deal-feeds/:id/publish', ...staff, async (req, res, next) => {
 
 router.delete('/deal-feeds/:id', ...staff, async (req, res, next) => {
   try {
-    const { DealFeed } = await import('../models/index.js');
     const row = await DealFeed.findByPk(req.params.id);
     if (!row) throw new AppError('动态不存在', 404);
     await row.destroy();
@@ -742,7 +732,6 @@ router.delete('/deal-feeds/:id', ...staff, async (req, res, next) => {
 
 router.post('/jobs/expire-quotes', ...staff, requireRoles('admin'), async (_req, res, next) => {
   try {
-    const { expirePendingQuotes } = await import('../services/deal-feed.js');
     const n = await expirePendingQuotes();
     ok(res, { expired: n });
   } catch (e) {
@@ -750,247 +739,7 @@ router.post('/jobs/expire-quotes', ...staff, requireRoles('admin'), async (_req,
   }
 });
 
-// —— Price indices (V4) ——
-router.get('/indices', ...staff, async (_req, res, next) => {
-  try {
-    const { listIndices } = await import('../services/index-price.js');
-    ok(res, await listIndices());
-  } catch (e) {
-    next(e);
-  }
-});
 
-router.post('/indices', ...staff, requireRoles('admin'), async (req, res, next) => {
-  try {
-    const { createIndex } = await import('../services/index-price.js');
-    ok(res, await createIndex(req.body));
-  } catch (e) {
-    next(e);
-  }
-});
-
-router.put('/indices/:id', ...staff, requireRoles('admin'), async (req, res, next) => {
-  try {
-    const { updateIndex } = await import('../services/index-price.js');
-    ok(res, await updateIndex(req.params.id, req.body));
-  } catch (e) {
-    next(e);
-  }
-});
-
-router.get('/indices/:id/prints', ...staff, async (req, res, next) => {
-  try {
-    const { listPrints } = await import('../services/index-price.js');
-    ok(res, await listPrints(req.params.id, { from: req.query.from, to: req.query.to }));
-  } catch (e) {
-    next(e);
-  }
-});
-
-router.post('/indices/:id/prints', ...staff, async (req, res, next) => {
-  try {
-    const { generatePrintFromMid, upsertManualPrint } = await import('../services/index-price.js');
-    const date = req.body.date || (await import('../utils/market.js')).todayShanghai();
-    let print;
-    if (req.body.settle_price != null) {
-      print = await upsertManualPrint(req.params.id, date, req.body.settle_price);
-    } else {
-      print = await generatePrintFromMid(req.params.id, date);
-    }
-    ok(res, print);
-  } catch (e) {
-    next(e);
-  }
-});
-
-router.post('/indices/:id/prints/:date/publish', ...staff, async (req, res, next) => {
-  try {
-    const { publishPrint } = await import('../services/index-price.js');
-    ok(res, await publishPrint(req.params.id, req.params.date), '已发布');
-  } catch (e) {
-    next(e);
-  }
-});
-
-router.post('/indices/:id/prints/:date/unpublish', ...staff, async (req, res, next) => {
-  try {
-    const { unpublishPrint } = await import('../services/index-price.js');
-    ok(res, await unpublishPrint(req.params.id, req.params.date), '已撤销发布');
-  } catch (e) {
-    next(e);
-  }
-});
-
-// —— Forward contracts (V4) ——
-router.get('/forwards', ...staff, async (req, res, next) => {
-  try {
-    const { listForwardsAdmin, presentForward } = await import('../services/forward-settle.js');
-    const rows = await listForwardsAdmin(req.query);
-    ok(res, await Promise.all(rows.map((r) => presentForward(r))));
-  } catch (e) {
-    next(e);
-  }
-});
-
-router.post('/forwards', ...staff, async (req, res, next) => {
-  try {
-    const { createForward } = await import('../services/forward-settle.js');
-    ok(res, await createForward(req.body, req.user.id), '已开仓，待双方确认');
-  } catch (e) {
-    next(e);
-  }
-});
-
-router.post('/forwards/settle-batch', ...staff, async (req, res, next) => {
-  try {
-    const { settleBatch } = await import('../services/forward-settle.js');
-    ok(res, await settleBatch({ asOf: req.body?.asOf }));
-  } catch (e) {
-    next(e);
-  }
-});
-
-router.post('/forwards/expire-confirms', ...staff, async (req, res, next) => {
-  try {
-    const { expirePendingConfirms } = await import('../services/forward-settle.js');
-    const asOf = req.body?.asOf ? new Date(req.body.asOf) : new Date();
-    ok(res, { cancelled: await expirePendingConfirms(asOf) });
-  } catch (e) {
-    next(e);
-  }
-});
-
-router.post('/forwards/:id/proxy-confirm', ...staff, async (req, res, next) => {
-  try {
-    const { proxyConfirm } = await import('../services/forward-settle.js');
-    ok(res, await proxyConfirm(req.params.id, req.body, req.user.id), '代理确认已记录');
-  } catch (e) {
-    next(e);
-  }
-});
-
-router.post('/forwards/:id/cancel', ...staff, async (req, res, next) => {
-  try {
-    const { cancelForward } = await import('../services/forward-settle.js');
-    ok(res, await cancelForward(req.params.id, req.body?.reason));
-  } catch (e) {
-    next(e);
-  }
-});
-
-router.get('/settlement-bills', ...staff, async (_req, res, next) => {
-  try {
-    const { listBillsAdmin } = await import('../services/forward-settle.js');
-    ok(res, await listBillsAdmin());
-  } catch (e) {
-    next(e);
-  }
-});
-
-router.post('/settlement-bills/:id/confirm-pay', ...staff, async (req, res, next) => {
-  try {
-    const { confirmBillPay } = await import('../services/forward-settle.js');
-    ok(res, await confirmBillPay(req.params.id, req.user.id), '已确认收付');
-  } catch (e) {
-    next(e);
-  }
-});
-
-// —— Portal users for forward counterparties ——
-router.get('/customers', ...staff, async (_req, res, next) => {
-  try {
-    const list = await User.findAll({
-      where: { role: { [Op.in]: ['customer', 'broker', 'admin'] } },
-      attributes: ['id', 'name', 'phone', 'company_name', 'role'],
-      order: [['id', 'ASC']],
-      limit: 500,
-    });
-    ok(res, list);
-  } catch (e) {
-    next(e);
-  }
-});
-
-// —— Physical delivery (M007) ——
-router.get('/delivery-channels', ...staff, async (_req, res, next) => {
-  try {
-    const { listChannels } = await import('../services/delivery.js');
-    ok(res, await listChannels());
-  } catch (e) {
-    next(e);
-  }
-});
-
-router.post('/delivery-channels', ...staff, requireRoles('admin'), async (req, res, next) => {
-  try {
-    const { createChannel } = await import('../services/delivery.js');
-    ok(res, await createChannel(req.body));
-  } catch (e) {
-    next(e);
-  }
-});
-
-router.put('/delivery-channels/:id', ...staff, requireRoles('admin'), async (req, res, next) => {
-  try {
-    const { updateChannel } = await import('../services/delivery.js');
-    ok(res, await updateChannel(req.params.id, req.body));
-  } catch (e) {
-    next(e);
-  }
-});
-
-router.get('/delivery-whitelists', ...staff, async (_req, res, next) => {
-  try {
-    const { listWhitelists } = await import('../services/delivery.js');
-    ok(res, await listWhitelists());
-  } catch (e) {
-    next(e);
-  }
-});
-
-router.post('/delivery-whitelists', ...staff, async (req, res, next) => {
-  try {
-    const { upsertWhitelist } = await import('../services/delivery.js');
-    ok(res, await upsertWhitelist(req.body, req.user.id), '白名单已更新');
-  } catch (e) {
-    next(e);
-  }
-});
-
-router.get('/delivery-orders', ...staff, async (req, res, next) => {
-  try {
-    const { listDeliveryOrders } = await import('../services/delivery.js');
-    ok(res, await listDeliveryOrders(req.query));
-  } catch (e) {
-    next(e);
-  }
-});
-
-router.post('/delivery-orders/:id/approve', ...staff, async (req, res, next) => {
-  try {
-    const { approveDelivery } = await import('../services/delivery.js');
-    ok(res, await approveDelivery(req.params.id, req.user.id, req.body), '已批准');
-  } catch (e) {
-    next(e);
-  }
-});
-
-router.post('/delivery-orders/:id/reject', ...staff, async (req, res, next) => {
-  try {
-    const { rejectDelivery } = await import('../services/delivery.js');
-    ok(res, await rejectDelivery(req.params.id, req.user.id, req.body?.reason), '已驳回');
-  } catch (e) {
-    next(e);
-  }
-});
-
-router.post('/delivery-orders/:id/complete', ...staff, async (req, res, next) => {
-  try {
-    const { completeDelivery } = await import('../services/delivery.js');
-    ok(res, await completeDelivery(req.params.id, req.user.id), '交割完成');
-  } catch (e) {
-    next(e);
-  }
-});
+router.use(forwardsRoutes);
 
 export default router;

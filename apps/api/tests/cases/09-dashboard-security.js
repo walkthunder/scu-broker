@@ -1,7 +1,7 @@
 import { describe } from '../lib/runner.js';
 import { req } from '../lib/http.js';
 import { assert, assertOk } from '../lib/assert.js';
-import { adminLogin, brokerLogin, customerLogin, auth } from '../lib/auth.js';
+import { customerLogin, ensureCustomer, adminLogin, auth, brokerLogin } from '../lib/auth.js';
 
 describe('Dashboard / 通知 / 隔离', ({ it }) => {
   it('Dashboard 返回关键字段', ['R-P1-8', 'R-ACCEPT-1'], async () => {
@@ -23,7 +23,7 @@ describe('Dashboard / 通知 / 隔离', ({ it }) => {
   });
 
   it('客户 Token 不能访问后台 API', ['R-AUTH-2'], async () => {
-    const { token } = await customerLogin(`128${String(Date.now()).slice(-8)}`);
+    const { token } = await ensureCustomer(`u${Date.now()}@test.local`);
     const r = await req('/admin/dashboard', { headers: auth(token) });
     assert(r.status === 403 || r.json?.code !== 0, 'customer blocked from admin');
   });
@@ -40,7 +40,7 @@ describe('Dashboard / 通知 / 隔离', ({ it }) => {
   });
 
   it('通知：新询价不抛错（开发环境写日志）', ['R-P1-9'], async () => {
-    const { token } = await customerLogin(`127${String(Date.now()).slice(-8)}`, {
+    const { token } = await ensureCustomer(`u${Date.now()}@test.local`, 'Pass1234!', {
       company_name: '通知测试公司',
     });
     const skus = await req('/customer/skus');

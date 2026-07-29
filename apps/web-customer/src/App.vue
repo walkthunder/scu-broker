@@ -6,19 +6,29 @@ const router = useRouter();
 const route = useRoute();
 const user = currentUser;
 
+/** 每个主导航互斥：子页只归属一个入口，避免双下划线 */
+const NAV_MATCH = {
+  prices: ['prices', 'sku-detail'],
+  indices: ['indices'],
+  rfq: ['rfq', 'rfq-success'],
+  forwards: ['forwards'],
+  bills: ['bills'],
+  mine: ['mine', 'rfq-detail', 'order-detail', 'account'],
+  about: ['about'],
+};
+
 function logout() {
   clearAuth();
   router.push('/');
 }
 
 function navClass(name) {
-  const active =
-    route.name === name ||
-    (name === 'mine' && ['rfq-detail', 'order-detail', 'forwards', 'bills'].includes(route.name)) ||
-    (name === 'prices' && ['sku-detail', 'indices'].includes(route.name));
+  const active = (NAV_MATCH[name] || [name]).includes(route.name);
   return [
     'cursor-pointer whitespace-nowrap border-b-2 px-1 py-3 text-sm transition-colors',
-    active ? 'border-amber-500 font-medium text-slate-100' : 'border-transparent text-slate-400 hover:text-slate-200',
+    active
+      ? 'border-amber-500 font-medium text-slate-100'
+      : 'border-transparent text-slate-400 hover:border-slate-600 hover:text-slate-200',
   ];
 }
 </script>
@@ -34,19 +44,73 @@ function navClass(name) {
               CompriX
             </span>
           </router-link>
-          <nav class="hidden items-center gap-5 sm:flex">
-            <router-link :to="{ name: 'prices' }" :class="navClass('prices')">行情</router-link>
-            <router-link :to="{ name: 'indices' }" :class="navClass('indices')">指数</router-link>
-            <router-link :to="{ name: 'rfq' }" :class="navClass('rfq')">询价</router-link>
-            <router-link :to="{ name: 'forwards' }" :class="navClass('forwards')">持仓</router-link>
-            <router-link :to="{ name: 'bills' }" :class="navClass('bills')">账单</router-link>
-            <router-link :to="{ name: 'mine' }" :class="navClass('mine')">工作台</router-link>
-            <router-link :to="{ name: 'about' }" :class="navClass('about')">保障</router-link>
+          <nav class="flex max-w-[58vw] items-center gap-3 overflow-x-auto sm:max-w-none sm:gap-5">
+            <router-link
+              :to="{ name: 'prices' }"
+              active-class=""
+              exact-active-class=""
+              :class="navClass('prices')"
+            >
+              行情
+            </router-link>
+            <router-link
+              :to="{ name: 'indices' }"
+              active-class=""
+              exact-active-class=""
+              :class="navClass('indices')"
+            >
+              指数
+            </router-link>
+            <router-link
+              :to="{ name: 'rfq' }"
+              active-class=""
+              exact-active-class=""
+              :class="navClass('rfq')"
+            >
+              询价
+            </router-link>
+            <router-link
+              :to="{ name: 'forwards' }"
+              active-class=""
+              exact-active-class=""
+              :class="navClass('forwards')"
+            >
+              持仓
+            </router-link>
+            <router-link
+              :to="{ name: 'bills' }"
+              active-class=""
+              exact-active-class=""
+              :class="navClass('bills')"
+            >
+              账单
+            </router-link>
+            <router-link
+              :to="{ name: 'mine' }"
+              active-class=""
+              exact-active-class=""
+              :class="navClass('mine')"
+            >
+              工作台
+            </router-link>
+            <router-link
+              :to="{ name: 'about' }"
+              active-class=""
+              exact-active-class=""
+              :class="navClass('about')"
+            >
+              保障
+            </router-link>
           </nav>
         </div>
         <div class="flex items-center gap-3 text-sm">
           <template v-if="user">
-            <span class="hidden font-mono text-xs text-slate-500 sm:inline">{{ user.phone }}</span>
+            <router-link
+              to="/account"
+              class="max-w-[9rem] truncate font-mono text-xs text-slate-500 hover:text-slate-300 sm:max-w-none"
+            >
+              {{ user.email || user.phone }}
+            </router-link>
             <button type="button" class="btn-ghost !px-2 !py-1 text-xs" @click="logout">退出</button>
           </template>
           <router-link v-else to="/login" class="btn-primary !py-1.5 !text-xs">登录</router-link>

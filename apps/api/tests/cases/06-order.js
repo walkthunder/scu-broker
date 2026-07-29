@@ -1,11 +1,11 @@
 import { describe } from '../lib/runner.js';
 import { req } from '../lib/http.js';
 import { assert, assertOk, assertFail, assertEq } from '../lib/assert.js';
-import { customerLogin, adminLogin, auth } from '../lib/auth.js';
+import { customerLogin, ensureCustomer, adminLogin, auth } from '../lib/auth.js';
 
 async function confirmedOrder() {
-  const phone = `132${String(Date.now()).slice(-8)}`;
-  const { token: ctoken } = await customerLogin(phone, { company_name: '订单公司' });
+  const email = `u${Date.now()}@test.local`;
+  const { token: ctoken } = await ensureCustomer(email, 'Pass1234!', { company_name: '订单公司' });
   const skus = await req('/customer/skus');
   const rfq = await req('/customer/rfqs', {
     method: 'POST',

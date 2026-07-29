@@ -1,10 +1,10 @@
 import { describe } from '../lib/runner.js';
 import { req } from '../lib/http.js';
 import { assert, assertOk, assertEq } from '../lib/assert.js';
-import { customerLogin, adminLogin, auth } from '../lib/auth.js';
+import { customerLogin, ensureCustomer, adminLogin, auth } from '../lib/auth.js';
 
 async function orderReady() {
-  const { token: ctoken } = await customerLogin(`131${String(Date.now()).slice(-8)}`, {
+  const { token: ctoken } = await ensureCustomer(`u${Date.now()}@test.local`, 'Pass1234!', {
     company_name: '财务公司',
   });
   const skus = await req('/customer/skus');

@@ -1,11 +1,11 @@
 import { describe } from '../lib/runner.js';
 import { req } from '../lib/http.js';
 import { assert, assertOk, assertFail, assertEq } from '../lib/assert.js';
-import { customerLogin, adminLogin, auth } from '../lib/auth.js';
+import { customerLogin, ensureCustomer, adminLogin, auth } from '../lib/auth.js';
 
 async function prepareRfq() {
-  const phone = `133${String(Date.now()).slice(-8)}`;
-  const { token: ctoken, user } = await customerLogin(phone, {
+  const email = `u${Date.now()}@test.local`;
+  const { token: ctoken, user } = await ensureCustomer(email, 'Pass1234!', {
     name: '报价客户',
     company_name: '报价公司',
   });

@@ -8,18 +8,28 @@ import {
   Sku,
   User,
 } from '../models/index.js';
+import { sequelize } from '../config/database.js';
 import { AppError } from '../utils/errors.js';
-import { todayShanghai, addDaysShanghai } from '../utils/market.js';
+import { todayShanghai } from '../utils/market.js';
+import {
+  isInDeliveryWindow,
+  DELIVERY_WINDOW_DAYS_BEFORE,
+} from './delivery-window.js';
+import {
+  assertForwardTransition,
+  blocksCashSettle,
+  canRequestDelivery,
+} from './forward-state.js';
 
-const WINDOW_DAYS_BEFORE = 7;
+export { isInDeliveryWindow } from './delivery-window.js';
 
 const orderInclude = [
   {
     association: 'contract',
     include: [
       { association: 'index', include: [{ association: 'sku', attributes: ['id', 'name'] }] },
-      { association: 'buyer', attributes: ['id', 'name', 'phone', 'company_name'] },
-      { association: 'seller', attributes: ['id', 'name', 'phone', 'company_name'] },
+      { association: 'buyer', attributes: ['id', 'name', 'phone', 'company_name', 'email'] },
+      { association: 'seller', attributes: ['id', 'name', 'phone', 'company_name', 'email'] },
     ],
   },
   {
@@ -29,15 +39,8 @@ const orderInclude = [
       { association: 'sku', attributes: ['id', 'name'] },
     ],
   },
-  { association: 'requester', attributes: ['id', 'name', 'phone'] },
+  { association: 'requester', attributes: ['id', 'name', 'phone', 'email'] },
 ];
-
-/** 申请窗口：expiry_date 往前 T-7 ～ 到期日当日（含） */
-export function isInDeliveryWindow(expiryDate, asOf = todayShanghai()) {
-  if (!expiryDate) return false;
-  const start = addDaysShanghai(expiryDate, -WINDOW_DAYS_BEFORE);
-  return asOf >= start && asOf <= expiryDate;
-}
 
 export async function listChannels({ activeOnly = false } = {}) {
   const where = activeOnly ? { active: true } : {};
@@ -80,7 +83,7 @@ export async function updateChannel(id, patch) {
 export async function listWhitelists() {
   return DeliveryWhitelist.findAll({
     include: [
-      { model: User, as: 'user', attributes: ['id', 'name', 'phone', 'company_name', 'role'] },
+      { model: User, as: 'user', attributes: ['id', 'name', 'phone', 'company_name', 'email', 'role'] },
       { model: User, as: 'approver', attributes: ['id', 'name'] },
     ],
     order: [['id', 'ASC']],
@@ -117,45 +120,56 @@ export async function isUserWhitelisted(userId) {
 
 export async function requestDelivery(contractId, userId, { channel_id, note } = {}) {
   if (!channel_id) throw new AppError('请选择交割通道');
-  const contract = await ForwardContract.findByPk(contractId, {
-    include: [{ association: 'index' }, { association: 'delivery_orders' }],
-  });
-  if (!contract) throw new AppError('合约不存在', 404);
-  if (contract.status !== 'open') throw new AppError('仅持仓中合约可申请交割');
-  if (contract.settle_mode === 'physical') throw new AppError('合约已转入实物交割意向');
 
-  const uid = Number(userId);
-  if (uid !== Number(contract.buyer_id) && uid !== Number(contract.seller_id)) {
-    throw new AppError('仅合约买方或卖方可申请', 403);
-  }
-  if (!(await isUserWhitelisted(uid))) {
-    throw new AppError('账户未开通实物交割白名单', 403);
-  }
-  if (!isInDeliveryWindow(contract.expiry_date)) {
-    throw new AppError(
-      `不在交割申请窗口内（到期日前 ${WINDOW_DAYS_BEFORE} 天至到期日当日）`,
+  return sequelize.transaction(async (t) => {
+    const contract = await ForwardContract.findByPk(contractId, {
+      transaction: t,
+      lock: t.LOCK.UPDATE,
+      include: [{ association: 'index' }],
+    });
+    if (!contract) throw new AppError('合约不存在', 404);
+    if (!canRequestDelivery(contract)) throw new AppError('仅持仓中现金合约可申请交割');
+
+    const uid = Number(userId);
+    if (uid !== Number(contract.buyer_id) && uid !== Number(contract.seller_id)) {
+      throw new AppError('仅合约买方或卖方可申请', 403);
+    }
+    if (!(await isUserWhitelisted(uid))) {
+      throw new AppError('账户未开通实物交割白名单', 403);
+    }
+    if (!isInDeliveryWindow(contract.expiry_date)) {
+      throw new AppError(
+        `不在交割申请窗口内（到期日前 ${DELIVERY_WINDOW_DAYS_BEFORE} 天至到期日当日）`,
+      );
+    }
+
+    const openReq = await DeliveryOrder.findOne({
+      where: {
+        contract_id: contract.id,
+        status: { [Op.in]: ['pending', 'approved'] },
+      },
+      transaction: t,
+      lock: t.LOCK.UPDATE,
+    });
+    if (openReq) throw new AppError('已有进行中的交割申请');
+
+    const channel = await DeliveryChannel.findByPk(channel_id, { transaction: t });
+    if (!channel || !channel.active) throw new AppError('交割通道不可用');
+
+    if (contract.index?.sku_id && Number(channel.sku_id) !== Number(contract.index.sku_id)) {
+      throw new AppError('交割通道 SKU 与合约标的不一致');
+    }
+
+    return DeliveryOrder.create(
+      {
+        contract_id: contract.id,
+        channel_id: channel.id,
+        status: 'pending',
+        requested_by: uid,
+        note: note || null,
+      },
+      { transaction: t },
     );
-  }
-
-  const openReq = (contract.delivery_orders || []).find((d) =>
-    ['pending', 'approved'].includes(d.status),
-  );
-  if (openReq) throw new AppError('已有进行中的交割申请');
-
-  const channel = await DeliveryChannel.findByPk(channel_id);
-  if (!channel || !channel.active) throw new AppError('交割通道不可用');
-
-  // 通道 SKU 尽量与指数锚定 SKU 一致（宽松：仅提示不强绑时仍允许，若 index.sku_id 存在则校验）
-  if (contract.index?.sku_id && Number(channel.sku_id) !== Number(contract.index.sku_id)) {
-    throw new AppError('交割通道 SKU 与合约标的不一致');
-  }
-
-  return DeliveryOrder.create({
-    contract_id: contract.id,
-    channel_id: channel.id,
-    status: 'pending',
-    requested_by: uid,
-    note: note || null,
   });
 }
 
@@ -169,12 +183,11 @@ export async function listDeliveryOrders(query = {}) {
   });
 }
 
-export async function approveDelivery(orderId, operatorId, { create_spot_order = false } = {}) {
+export async function approveDelivery(orderId, operatorId) {
   const row = await DeliveryOrder.findByPk(orderId, { include: orderInclude });
   if (!row) throw new AppError('交割工单不存在', 404);
   if (row.status !== 'pending') throw new AppError('仅待审核工单可批准');
 
-  const { sequelize } = await import('../config/database.js');
   await sequelize.transaction(async (t) => {
     const order = await DeliveryOrder.findByPk(orderId, {
       transaction: t,
@@ -190,11 +203,10 @@ export async function approveDelivery(orderId, operatorId, { create_spot_order =
     order.status = 'approved';
     order.reviewed_by = operatorId;
     order.reviewed_at = new Date();
-    if (create_spot_order) {
-      order.note = `${order.note || ''}\n[approve] 已标记需线下建履约单`.trim();
-    }
     await order.save({ transaction: t });
 
+    assertForwardTransition(contract.status, 'delivery_pending');
+    contract.status = 'delivery_pending';
     contract.settle_mode = 'physical';
     await contract.save({ transaction: t });
   });
@@ -219,7 +231,6 @@ export async function completeDelivery(orderId, operatorId) {
   if (!row) throw new AppError('交割工单不存在', 404);
   if (row.status !== 'approved') throw new AppError('仅已批准工单可完成');
 
-  const { sequelize } = await import('../config/database.js');
   await sequelize.transaction(async (t) => {
     const order = await DeliveryOrder.findByPk(orderId, {
       transaction: t,
@@ -230,13 +241,16 @@ export async function completeDelivery(orderId, operatorId) {
       transaction: t,
       lock: t.LOCK.UPDATE,
     });
-    if (!contract || contract.status !== 'open') throw new AppError('合约状态不可完成交割');
+    if (!contract || contract.status !== 'delivery_pending') {
+      throw new AppError('合约状态不可完成交割');
+    }
 
     order.status = 'done';
     order.completed_at = new Date();
     if (!order.reviewed_by) order.reviewed_by = operatorId;
     await order.save({ transaction: t });
 
+    assertForwardTransition(contract.status, 'delivered');
     contract.status = 'delivered';
     contract.settle_mode = 'physical';
     await contract.save({ transaction: t });
@@ -262,9 +276,7 @@ export async function deliveryRatioStats() {
 /** 合约是否因交割流程应跳过现金结算 */
 export async function shouldSkipCashSettle(contractId) {
   const contract = await ForwardContract.findByPk(contractId);
-  if (!contract) return true;
-  if (contract.settle_mode === 'physical') return true;
-  if (contract.status === 'delivered') return true;
+  if (blocksCashSettle(contract)) return true;
   const active = await DeliveryOrder.findOne({
     where: {
       contract_id: contractId,
@@ -272,4 +284,26 @@ export async function shouldSkipCashSettle(contractId) {
     },
   });
   return !!active;
+}
+
+/**
+ * 到期日已过仍未审批的 pending 工单自动驳回，避免永远卡死现金结算。
+ * approved / delivery_pending 不自动驳回。
+ */
+export async function expireStalePendingDeliveries(asOf = todayShanghai()) {
+  const pending = await DeliveryOrder.findAll({
+    where: { status: 'pending' },
+    include: [{ association: 'contract', attributes: ['id', 'expiry_date', 'status'] }],
+  });
+  let n = 0;
+  for (const order of pending) {
+    const expiry = order.contract?.expiry_date;
+    if (!expiry || expiry >= asOf) continue;
+    order.status = 'rejected';
+    order.reviewed_at = new Date();
+    order.note = `${order.note || ''}\n[auto-reject] 超过到期日未审批，释放现金结算`.trim();
+    await order.save();
+    n += 1;
+  }
+  return n;
 }

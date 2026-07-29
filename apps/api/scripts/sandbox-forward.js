@@ -24,11 +24,10 @@ async function api(path, { method = 'GET', token, body } = {}) {
   return json.data;
 }
 
-async function customerLogin(phone) {
-  await api('/customer/otp', { method: 'POST', body: { phone } });
+async function customerLogin(email, password = 'Pass1234!') {
   return api('/customer/login', {
     method: 'POST',
-    body: { phone, code: process.env.DEV_OTP || '123456' },
+    body: { email, password },
   });
 }
 
@@ -59,8 +58,8 @@ async function runStory({ label, X, S, qty, expiryOffset }) {
     method: 'POST',
     body: { phone: '13800000000', password: 'admin123' },
   });
-  const buyer = await customerLogin('13900001001');
-  const seller = await customerLogin('13900001002');
+  const buyer = await customerLogin('buyer@comprix.local');
+  const seller = await customerLogin('seller@comprix.local');
   const indices = await api('/admin/indices', { token: admin.token });
   const idx = indices.find((x) => x.code === 'H100-M') || indices[0];
   const preferred = addDaysShanghai(todayShanghai(), expiryOffset);

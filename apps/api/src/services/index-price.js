@@ -12,6 +12,32 @@ export async function listIndices({ activeOnly = false } = {}) {
   });
 }
 
+/** 客户侧指数列表：附带最新 published S（批量查，避免路由 N+1） */
+export async function listIndicesWithLatest({ activeOnly = true } = {}) {
+  const list = await listIndices({ activeOnly });
+  const out = [];
+  for (const idx of list) {
+    const j = idx.toJSON();
+    const latest = await getLatestPublished(idx.id);
+    j.latest_published = latest
+      ? { date: latest.date, settle_price: Number(latest.settle_price) }
+      : null;
+    out.push(j);
+  }
+  return out;
+}
+
+export async function listPublishedPrints(indexId, { from, to } = {}) {
+  const prints = await listPrints(indexId, { from, to });
+  return prints
+    .filter((p) => p.status === 'published')
+    .map((p) => ({
+      date: p.date,
+      settle_price: Number(p.settle_price),
+      source: p.source,
+    }));
+}
+
 export async function getIndexOrThrow(id) {
   const row = await PriceIndex.findByPk(id, {
     include: [{ association: 'sku', attributes: ['id', 'name', 'unit', 'type'] }],

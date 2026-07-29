@@ -1,7 +1,7 @@
 import { describe } from '../lib/runner.js';
 import { req } from '../lib/http.js';
 import { assert, assertOk, assertFail, assertEq } from '../lib/assert.js';
-import { customerLogin, adminLogin, auth } from '../lib/auth.js';
+import { customerLogin, ensureCustomer, adminLogin, auth } from '../lib/auth.js';
 
 async function pickSku() {
   const skus = await req('/customer/skus');
@@ -21,8 +21,8 @@ describe('询价 RFQ', ({ it }) => {
   });
 
   it('客户提交询价 → pending', ['R-P0-3', 'R-ACCEPT-1'], async () => {
-    const phone = `136${String(Date.now()).slice(-8)}`;
-    const { token } = await customerLogin(phone, { name: '询价客', company_name: '询价公司' });
+    const email = `u${Date.now()}@test.local`;
+    const { token } = await ensureCustomer(email, 'Pass1234!', { name: '询价客', company_name: '询价公司' });
     const skuId = await pickSku();
     const created = await req('/customer/rfqs', {
       method: 'POST',
@@ -47,8 +47,8 @@ describe('询价 RFQ', ({ it }) => {
   });
 
   it('客户只能看自己的询价', ['R-GAP-MINE'], async () => {
-    const a = await customerLogin(`136${String(Date.now()).slice(-8)}`);
-    const b = await customerLogin(`135${String(Date.now()).slice(-8)}`);
+    const a = await ensureCustomer(`u${Date.now()}@test.local`);
+    const b = await ensureCustomer(`u${Date.now()}@test.local`);
     const skuId = await pickSku();
     const created = await req('/customer/rfqs', {
       method: 'POST',
@@ -64,7 +64,7 @@ describe('询价 RFQ', ({ it }) => {
   });
 
   it('后台可列表筛选与分配 Broker', ['R-P0-3', 'R-ACCEPT-2'], async () => {
-    const { token: ctoken } = await customerLogin(`134${String(Date.now()).slice(-8)}`, {
+    const { token: ctoken } = await ensureCustomer(`u${Date.now()}@test.local`, 'Pass1234!', {
       company_name: '待分配公司',
     });
     const skuId = await pickSku();

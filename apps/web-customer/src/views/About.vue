@@ -9,10 +9,24 @@
           询价 → Broker 分配与线下谈价 → 正式报价（24h）→ 确认生成订单 → 待签约 / 待交付 / 待验收 / 待结算 → 已完成。
         </p>
       </section>
-      <section class="panel p-5">
-        <h2 class="font-medium text-slate-100">计费与结算</h2>
+      <section id="index-rules" class="panel scroll-mt-24 p-5">
+        <h2 class="font-medium text-slate-100">指数规则（摘要）</h2>
         <p class="mt-2 text-slate-400">
-          参考价仅供决策；成交价以确认报价为准。收款与供应商放款线下完成，后台登记应收应付。
+          每个价格指数绑定一个公开 SKU 参考价；运营按日写入结算价 S，发布后才可用于远期盯市与到期结算。已发布当日 S
+          不可被结算覆盖。未发布则不可开新仓、不可批结算。
+        </p>
+      </section>
+      <section id="settle-rules" class="panel scroll-mt-24 p-5">
+        <h2 class="font-medium text-slate-100">结算规则（摘要）</h2>
+        <p class="mt-2 text-slate-400">
+          现金结算差价 = (S − X) × 数量。S &gt; X 时卖方付买方；S &lt; X 时买方付卖方。账单出现在「账单」页，线下收付后由
+          Broker 确认。
+        </p>
+      </section>
+      <section id="delivery-rules" class="panel scroll-mt-24 p-5">
+        <h2 class="font-medium text-slate-100">交割规则（摘要）</h2>
+        <p class="mt-2 text-slate-400">
+          默认现金结算。白名单账户可在到期前 7 天至到期日申请实物交割；批准后不再现金结算，通道方交付后由运营标记完成。
         </p>
       </section>
       <section class="panel p-5">
