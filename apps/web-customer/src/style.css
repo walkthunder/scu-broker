@@ -5,7 +5,7 @@
 @tailwind utilities;
 
 :root {
-  --bg: #0f172a;
+  --bg: #0b1220;
   --surface: #1e293b;
   --border: #334155;
   --text: #e2e8f0;
@@ -13,9 +13,16 @@
   --accent: #f59e0b;
   --up: #ef4444;
   --down: #22c55e;
+  --bottom-nav-h: 56px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 @layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
   body {
     @apply antialiased;
     background: var(--bg);
@@ -23,13 +30,25 @@
     font-family: 'IBM Plex Sans', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   }
 
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
   input,
   select,
   textarea {
-    @apply rounded-sm border px-3 py-2 text-sm outline-none transition-colors;
+    @apply rounded-sm border px-3 py-2.5 text-sm outline-none transition-colors;
     background: #0f172a;
     border-color: var(--border);
     color: var(--text);
+    min-height: 44px;
+    font-size: 16px;
   }
 
   input:focus,
@@ -43,31 +62,71 @@
     @apply opacity-60;
     background: #1e293b;
   }
+
+  @media (min-width: 640px) {
+    input,
+    select,
+    textarea {
+      font-size: 14px;
+      min-height: 0;
+      @apply py-2;
+    }
+  }
 }
 
 @layer components {
+  .tap-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .app-main.has-bottom-nav {
+    padding-bottom: calc(var(--bottom-nav-h) + var(--safe-bottom) + 12px);
+  }
+
+  .bottom-nav {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    display: flex;
+    align-items: stretch;
+    min-height: calc(var(--bottom-nav-h) + var(--safe-bottom));
+    padding-bottom: var(--safe-bottom);
+    border-top: 1px solid var(--border);
+    background: rgba(11, 18, 32, 0.96);
+    backdrop-filter: blur(12px);
+  }
+
   .btn-primary {
-    @apply inline-flex cursor-pointer items-center justify-center rounded-sm px-4 py-2 text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex cursor-pointer items-center justify-center rounded-sm px-4 py-2.5 text-sm font-medium transition-colors duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
     background: var(--accent);
     color: #0f172a;
+    min-height: 44px;
   }
   .btn-primary:hover {
     background: #d97706;
   }
+  .btn-primary:active {
+    opacity: 0.9;
+  }
 
   .btn-secondary {
-    @apply inline-flex cursor-pointer items-center justify-center rounded-sm border px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50;
+    @apply inline-flex cursor-pointer items-center justify-center rounded-sm border px-4 py-2.5 text-sm font-medium transition-colors duration-200 disabled:opacity-50;
     border-color: var(--border);
     background: transparent;
     color: var(--text);
+    min-height: 44px;
   }
   .btn-secondary:hover {
     background: #1e293b;
   }
 
   .btn-ghost {
-    @apply inline-flex cursor-pointer items-center justify-center rounded-sm px-3 py-1.5 text-sm font-medium transition-colors;
+    @apply inline-flex cursor-pointer items-center justify-center rounded-sm px-3 py-2 text-sm font-medium transition-colors duration-200;
     color: var(--muted);
+    min-height: 44px;
   }
   .btn-ghost:hover {
     color: var(--text);
@@ -92,6 +151,11 @@
   .field-label {
     @apply block text-xs font-medium uppercase tracking-wide;
     color: var(--muted);
+  }
+
+  .table-scroll {
+    @apply -mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0;
+    -webkit-overflow-scrolling: touch;
   }
 
   .data-table {
@@ -130,5 +194,9 @@
   }
   .accent {
     color: var(--accent);
+  }
+
+  .market-card {
+    @apply rounded border border-slate-700 bg-slate-900/90 p-3;
   }
 }

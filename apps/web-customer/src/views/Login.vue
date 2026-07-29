@@ -12,6 +12,8 @@ const password2 = ref('');
 const code = ref('');
 const name = ref('');
 const company_name = ref('');
+const source = ref('other');
+const invite_code = ref('');
 const msg = ref('');
 const err = ref('');
 const sending = ref(false);
@@ -92,6 +94,8 @@ async function submitRegister() {
         code: code.value.trim(),
         name: name.value || undefined,
         company_name: company_name.value || undefined,
+        source: source.value || 'other',
+        invite_code: invite_code.value || undefined,
       },
     });
     setAuth(res.data.token, res.data.user);
@@ -136,8 +140,8 @@ function onSubmit() {
 </script>
 
 <template>
-  <div class="mx-auto max-w-md">
-    <div class="border-b border-slate-300 pb-4">
+  <div class="mx-auto max-w-md px-4 py-8 sm:py-12">
+    <div class="border-b border-slate-700 pb-4">
       <h1 class="page-title">
         {{ mode === 'login' ? '登录' : mode === 'register' ? '注册' : '重置密码' }}
       </h1>
@@ -150,10 +154,10 @@ function onSubmit() {
       </p>
     </div>
 
-    <div class="mt-4 flex gap-2 text-sm">
+    <div class="mt-4 flex gap-1 overflow-x-auto text-sm">
       <button
         type="button"
-        class="rounded px-3 py-1.5"
+        class="tap-target shrink-0 rounded px-3 py-2"
         :class="mode === 'login' ? 'bg-amber-500/20 text-amber-300' : 'text-slate-400'"
         @click="switchMode('login')"
       >
@@ -161,7 +165,7 @@ function onSubmit() {
       </button>
       <button
         type="button"
-        class="rounded px-3 py-1.5"
+        class="tap-target shrink-0 rounded px-3 py-2"
         :class="mode === 'register' ? 'bg-amber-500/20 text-amber-300' : 'text-slate-400'"
         @click="switchMode('register')"
       >
@@ -169,7 +173,7 @@ function onSubmit() {
       </button>
       <button
         type="button"
-        class="rounded px-3 py-1.5"
+        class="tap-target shrink-0 rounded px-3 py-2"
         :class="mode === 'forgot' ? 'bg-amber-500/20 text-amber-300' : 'text-slate-400'"
         @click="switchMode('forgot')"
       >
@@ -239,10 +243,24 @@ function onSubmit() {
           公司名称（选填）
           <input v-model="company_name" class="mt-1.5 w-full" autocomplete="organization" />
         </label>
+        <label class="field-label">
+          了解渠道
+          <select v-model="source" class="mt-1.5 w-full font-mono">
+            <option value="friend">朋友推荐</option>
+            <option value="partner">合作伙伴</option>
+            <option value="sales">销售触达</option>
+            <option value="event">活动/展会</option>
+            <option value="other">其他</option>
+          </select>
+        </label>
+        <label class="field-label">
+          邀请码（选填）
+          <input v-model="invite_code" class="mt-1.5 w-full font-mono" />
+        </label>
       </template>
 
-      <p v-if="msg" class="text-sm text-slate-600">{{ msg }}</p>
-      <p v-if="err" class="text-sm text-red-700">{{ err }}</p>
+      <p v-if="msg" class="text-sm text-slate-400">{{ msg }}</p>
+      <p v-if="err" class="text-sm text-red-400">{{ err }}</p>
       <button type="submit" class="btn-primary w-full" :disabled="busy">
         {{
           busy
@@ -257,3 +275,4 @@ function onSubmit() {
     </form>
   </div>
 </template>
+

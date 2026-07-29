@@ -34,6 +34,9 @@ import {
   approveDelivery,
   rejectDelivery,
   completeDelivery,
+  startDelivery,
+  reconcileDelivery,
+  defaultDelivery,
 } from '../services/delivery.js';
 
 const router = Router();
@@ -252,6 +255,30 @@ router.post('/delivery-orders/:id/reject', ...staff, async (req, res, next) => {
 router.post('/delivery-orders/:id/complete', ...staff, async (req, res, next) => {
   try {
     ok(res, await completeDelivery(req.params.id, req.user.id), '交割完成');
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/delivery-orders/:id/start', ...staff, async (req, res, next) => {
+  try {
+    ok(res, await startDelivery(Number(req.params.id), req.user.id), '已进入交割中');
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/delivery-orders/:id/reconcile', ...staff, async (req, res, next) => {
+  try {
+    ok(res, await reconcileDelivery(Number(req.params.id), req.user.id, req.body), '已对账');
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/delivery-orders/:id/default', ...staff, requireRoles('admin'), async (req, res, next) => {
+  try {
+    ok(res, await defaultDelivery(Number(req.params.id), req.user.id, req.body), '已违约处理');
   } catch (e) {
     next(e);
   }

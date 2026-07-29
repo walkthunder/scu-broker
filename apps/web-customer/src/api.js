@@ -46,10 +46,13 @@ export async function api(path, options = {}) {
   if (!(options.body instanceof FormData)) {
     headers['Content-Type'] = 'application/json';
   }
+  headers['Cache-Control'] = 'no-cache';
+  headers.Pragma = 'no-cache';
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
+    cache: 'no-store',
     headers,
     body:
       options.body && !(options.body instanceof FormData)

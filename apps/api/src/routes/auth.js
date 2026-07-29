@@ -118,7 +118,24 @@ router.post('/customer/register', async (req, res, next) => {
       company_name: req.body.company_name ? String(req.body.company_name).trim() : null,
       password_hash: await bcrypt.hash(password, 10),
       role: 'customer',
+      source: ['friend', 'partner', 'sales', 'event', 'other'].includes(req.body.source)
+        ? req.body.source
+        : req.body.invite_code
+          ? 'friend'
+          : 'other',
     });
+    if (req.body.invite_code || req.body.source) {
+      const { CrmLead } = await import('../models/frd-models.js');
+      await CrmLead.create({
+        user_id: user.id,
+        company_name: user.company_name,
+        contact_name: user.name,
+        phone: user.phone,
+        source: user.source || 'other',
+        stage: 'lead',
+        note: req.body.invite_code ? `邀请码 ${req.body.invite_code}` : '自助注册',
+      });
+    }
 
     const token = signToken(user);
     ok(res, { token, user: publicUser(user) }, '注册成功');
@@ -225,7 +242,7 @@ router.post('/admin/login', async (req, res, next) => {
       user = await User.findOne({ where: { phone: account } });
     }
 
-    if (!user || !['broker', 'admin'].includes(user.role)) {
+    if (!user || !['broker', 'admin', 'partner'].includes(user.role)) {
       throw new AppError('账号或密码错误', 401);
     }
     if (!user.password_hash || !(await bcrypt.compare(password, user.password_hash))) {

@@ -15,6 +15,13 @@ export function addDaysShanghai(isoDate, deltaDays) {
   return dt.toISOString().slice(0, 10);
 }
 
+export function addMonthsShanghai(isoDate, months) {
+  const [y, m, d] = isoDate.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCMonth(dt.getUTCMonth() + Number(months));
+  return dt.toISOString().slice(0, 10);
+}
+
 /** 前台可见：active + is_public + 非测试命名 */
 export function publicSkuWhere() {
   return {

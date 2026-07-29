@@ -70,7 +70,7 @@ function fmtTime(v) {
 </script>
 
 <template>
-  <div class="mx-auto max-w-6xl px-4 py-8">
+  <div class="mx-auto max-w-6xl px-4 py-6 sm:py-8">
     <h1 class="page-title">我的工作台</h1>
     <p class="page-desc">跟进询价、确认报价、查看订单进度。报价剩余时间每秒刷新，列表约 30 秒自动同步。</p>
 
@@ -82,7 +82,7 @@ function fmtTime(v) {
         <h2 class="text-sm font-medium text-amber-500">待确认报价</h2>
         <ul class="mt-3 space-y-2">
           <li v-for="t in todos" :key="t.id" class="flex flex-wrap items-center justify-between gap-2 text-sm">
-            <router-link :to="`/rfqs/${t.id}`" class="text-slate-200 hover:text-amber-400">
+            <router-link :to="`/rfqs/${t.id}`" class="tap-target text-slate-200 hover:text-amber-400">
               #{{ t.id }} {{ t.sku?.name }} · ¥{{ Number(t.quote.price).toLocaleString('zh-CN') }}
             </router-link>
             <span class="font-mono text-amber-500">剩余 {{ fmtRemain(remainSeconds(t.quote)) }}</span>
@@ -92,7 +92,31 @@ function fmtTime(v) {
 
       <section class="mt-8">
         <h2 class="text-sm font-medium uppercase tracking-wider text-slate-400">询价</h2>
-        <div class="panel mt-3 overflow-x-auto">
+        <div class="mt-3 space-y-2 md:hidden">
+          <button
+            v-for="r in rfqs"
+            :key="r.id"
+            type="button"
+            class="market-card w-full cursor-pointer text-left"
+            @click="$router.push(`/rfqs/${r.id}`)"
+          >
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0">
+                <p class="font-mono text-sm text-slate-100">#{{ r.id }} · {{ r.sku?.name }}</p>
+                <p class="mt-0.5 text-xs text-slate-500">
+                  数量 {{ r.quantity }} · {{ r.duration || '—' }}
+                </p>
+              </div>
+              <span class="shrink-0 text-xs text-slate-300">{{ statusLabel[r.status] || r.status }}</span>
+            </div>
+            <p class="mt-2 font-mono text-[10px] text-slate-600">{{ fmtTime(r.createdAt || r.created_at) }}</p>
+          </button>
+          <p v-if="!rfqs.length" class="py-8 text-center text-sm text-slate-500">
+            暂无询价。
+            <router-link to="/" class="text-amber-500 hover:underline">去行情大厅</router-link>
+          </p>
+        </div>
+        <div class="panel mt-3 hidden overflow-x-auto md:block">
           <table class="data-table">
             <thead>
               <tr>
@@ -131,7 +155,30 @@ function fmtTime(v) {
 
       <section class="mt-8">
         <h2 class="text-sm font-medium uppercase tracking-wider text-slate-400">订单</h2>
-        <div class="panel mt-3 overflow-x-auto">
+        <div class="mt-3 space-y-2 md:hidden">
+          <button
+            v-for="o in orders"
+            :key="o.id"
+            type="button"
+            class="market-card w-full cursor-pointer text-left"
+            @click="$router.push(`/orders/${o.id}`)"
+          >
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0">
+                <p class="font-mono text-sm text-slate-100">#{{ o.id }} · {{ o.sku?.name }}</p>
+                <p class="mt-0.5 text-xs text-slate-500">{{ o.supplier_display || '—' }}</p>
+              </div>
+              <div class="shrink-0 text-right">
+                <p class="mono-num text-sm font-semibold text-amber-500">
+                  {{ Number(o.price).toLocaleString('zh-CN') }}
+                </p>
+                <p class="mt-0.5 text-xs text-slate-400">{{ o.status }}</p>
+              </div>
+            </div>
+          </button>
+          <p v-if="!orders.length" class="py-8 text-center text-sm text-slate-500">暂无订单</p>
+        </div>
+        <div class="panel mt-3 hidden overflow-x-auto md:block">
           <table class="data-table">
             <thead>
               <tr>
@@ -165,3 +212,4 @@ function fmtTime(v) {
     </template>
   </div>
 </template>
+

@@ -19,28 +19,81 @@ onMounted(async () => {
 
 <template>
   <div>
-    <h2>Dashboard</h2>
-    <p v-if="err" style="color: #f56c6c">{{ err }}</p>
+    <div class="page-head">
+      <h2>Dashboard</h2>
+      <p class="page-desc">现货询价、远期结算与交割北星一览。</p>
+    </div>
+    <p v-if="err" style="color: var(--cx-danger)">{{ err }}</p>
     <template v-if="data">
-      <el-row :gutter="16" style="margin-top: 16px">
-        <el-col :span="6"><el-card shadow="hover">今日询价<br /><b style="font-size: 28px">{{ data.today_rfqs }}</b></el-card></el-col>
-        <el-col :span="6"><el-card shadow="hover">待处理询价<br /><b style="font-size: 28px">{{ data.pending_rfqs }}</b></el-card></el-col>
-        <el-col :span="6"><el-card shadow="hover">本月成交单量<br /><b style="font-size: 28px">{{ data.month_orders }}</b></el-card></el-col>
-        <el-col :span="6"><el-card shadow="hover">本月成交额<br /><b style="font-size: 28px">{{ Number(data.month_amount).toLocaleString() }}</b></el-card></el-col>
+      <el-row :gutter="16">
+        <el-col :span="6">
+          <el-card class="stat-card" shadow="never">
+            <div class="stat-label">今日询价</div>
+            <div class="stat-value">{{ data.today_rfqs }}</div>
+          </el-card>
+        </el-col>
+        <el-col :span="6">
+          <el-card class="stat-card" shadow="never">
+            <div class="stat-label">待处理询价</div>
+            <div class="stat-value accent">{{ data.pending_rfqs }}</div>
+          </el-card>
+        </el-col>
+        <el-col :span="6">
+          <el-card class="stat-card" shadow="never">
+            <div class="stat-label">本月成交单量</div>
+            <div class="stat-value">{{ data.month_orders }}</div>
+          </el-card>
+        </el-col>
+        <el-col :span="6">
+          <el-card class="stat-card" shadow="never">
+            <div class="stat-label">本月成交额</div>
+            <div class="stat-value">{{ Number(data.month_amount).toLocaleString() }}</div>
+          </el-card>
+        </el-col>
       </el-row>
       <el-row :gutter="16" style="margin-top: 16px">
-        <el-col :span="8"><el-card shadow="hover">现金结算完结合约（北星）<br /><b style="font-size: 28px">{{ data.settled_contracts ?? 0 }}</b></el-card></el-col>
-        <el-col :span="8"><el-card shadow="hover">远期待确认<br /><b style="font-size: 28px">{{ data.pending_confirms ?? 0 }}</b></el-card></el-col>
-        <el-col :span="8"><el-card shadow="hover">今日待发布指数<br /><b style="font-size: 28px">{{ data.pending_index_prints ?? 0 }}</b></el-card></el-col>
+        <el-col :span="8">
+          <el-card class="stat-card" shadow="never">
+            <div class="stat-label">现金结算完结合约（北星）</div>
+            <div class="stat-value accent">{{ data.settled_contracts ?? 0 }}</div>
+          </el-card>
+        </el-col>
+        <el-col :span="8">
+          <el-card class="stat-card" shadow="never">
+            <div class="stat-label">远期待确认</div>
+            <div class="stat-value">{{ data.pending_confirms ?? 0 }}</div>
+          </el-card>
+        </el-col>
+        <el-col :span="8">
+          <el-card class="stat-card" shadow="never">
+            <div class="stat-label">今日待发布指数</div>
+            <div class="stat-value">{{ data.pending_index_prints ?? 0 }}</div>
+          </el-card>
+        </el-col>
       </el-row>
       <el-row :gutter="16" style="margin-top: 16px">
-        <el-col :span="8"><el-card shadow="hover">实物交割完结合约<br /><b style="font-size: 28px">{{ data.delivered_contracts ?? 0 }}</b></el-card></el-col>
-        <el-col :span="8"><el-card shadow="hover">实物交割占比 %<br /><b style="font-size: 28px">{{ data.physical_ratio_pct ?? 0 }}</b></el-card></el-col>
+        <el-col :span="8">
+          <el-card class="stat-card" shadow="never">
+            <div class="stat-label">实物交割完结合约</div>
+            <div class="stat-value">{{ data.delivered_contracts ?? 0 }}</div>
+          </el-card>
+        </el-col>
+        <el-col :span="8">
+          <el-card class="stat-card" shadow="never">
+            <div class="stat-label">实物交割占比 %</div>
+            <div class="stat-value">{{ data.physical_ratio_pct ?? 0 }}</div>
+          </el-card>
+        </el-col>
       </el-row>
-      <h3 style="margin-top: 24px">最近待处理询价</h3>
-      <el-table :data="data.recent_pending" style="margin-top: 8px">
+      <div class="page-head" style="margin-top: 28px; margin-bottom: 10px">
+        <h2 style="font-size: 16px">最近待处理询价</h2>
+      </div>
+      <el-table :data="data.recent_pending">
         <el-table-column prop="id" label="询价号" width="90" />
-        <el-table-column label="客户" :formatter="(row) => row.customer?.company_name || row.customer?.name" />
+        <el-table-column
+          label="客户"
+          :formatter="(row) => row.customer?.company_name || row.customer?.name"
+        />
         <el-table-column label="SKU" :formatter="(row) => row.sku?.name" />
         <el-table-column prop="created_at" label="提交时间" />
       </el-table>

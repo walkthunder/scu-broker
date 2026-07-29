@@ -20,8 +20,10 @@ const isAdmin = computed(() => getUser()?.role === 'admin');
 const orderStatusLabel = {
   pending: '待审核',
   approved: '已批准',
+  in_delivery: '交割中',
+  done: '已交割',
+  reconciled: '已对账',
   rejected: '已驳回',
-  done: '已完成',
   cancelled: '已取消',
 };
 
@@ -48,7 +50,38 @@ async function load() {
 
 onMounted(load);
 
+function suggestChannelName() {
+  const sup = suppliers.value.find((s) => s.id === channelForm.supplier_id);
+  const sku = skus.value.find((s) => s.id === channelForm.sku_id);
+  if (!sup || !sku) return;
+  const left = sup.display_name || sup.name;
+  channelForm.name = `${left}·${sku.name}`;
+}
+
+function openChannel() {
+  Object.assign(channelForm, {
+    name: '',
+    supplier_id: suppliers.value[0]?.id || null,
+    sku_id: skus.value.find((s) => s.status === 'active')?.id || skus.value[0]?.id || null,
+  });
+  suggestChannelName();
+  channelVisible.value = true;
+}
+
+function openWl() {
+  Object.assign(wlForm, {
+    user_id: customers.value[0]?.id || null,
+    active: true,
+    note: '试运行白名单',
+  });
+  wlVisible.value = true;
+}
+
 async function saveChannel() {
+  if (!channelForm.supplier_id || !channelForm.sku_id || !String(channelForm.name || '').trim()) {
+    ElMessage.warning('请填写名称并选择供应商、SKU');
+    return;
+  }
   try {
     await api('/admin/delivery-channels', { method: 'POST', body: { ...channelForm } });
     ElMessage.success('通道已创建');
@@ -72,6 +105,10 @@ async function toggleChannel(row) {
 }
 
 async function saveWl() {
+  if (!wlForm.user_id) {
+    ElMessage.warning('请选择账户');
+    return;
+  }
   try {
     await api('/admin/delivery-whitelists', { method: 'POST', body: { ...wlForm } });
     ElMessage.success('白名单已更新');
@@ -115,6 +152,42 @@ async function complete(row) {
   }
 }
 
+async function start(row) {
+  try {
+    await api(`/admin/delivery-orders/${row.id}/start`, { method: 'POST', body: {} });
+    ElMessage.success('已进入交割中');
+    await load();
+  } catch (e) {
+    ElMessage.error(e.message);
+  }
+}
+
+async function reconcile(row) {
+  try {
+    await api(`/admin/delivery-orders/${row.id}/reconcile`, {
+      method: 'POST',
+      body: { partner_pay_amount: 0 },
+    });
+    ElMessage.success('已对账');
+    await load();
+  } catch (e) {
+    ElMessage.error(e.message);
+  }
+}
+
+async function markDefault(row) {
+  try {
+    await api(`/admin/delivery-orders/${row.id}/default`, {
+      method: 'POST',
+      body: { reason: '运营标记违约', blacklist: false },
+    });
+    ElMessage.success('已违约处置');
+    await load();
+  } catch (e) {
+    ElMessage.error(e.message);
+  }
+}
+
 const userLabel = (u) =>
   u ? `${u.company_name || u.name || '用户'} (#${u.id})` : '';
 </script>
@@ -139,7 +212,7 @@ const userLabel = (u) =>
         <el-table-column label="状态" width="100">
           <template #default="{ row }">{{ orderStatusLabel[row.status] || row.status }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="220">
+        <el-table-column label="操作" width="320">
           <template #default="{ row }">
             <template v-if="row.status === 'pending'">
               <el-button link type="primary" @click="approve(row)">批准</el-button>
@@ -148,9 +221,26 @@ const userLabel = (u) =>
             <el-button
               v-if="row.status === 'approved'"
               link
+              type="warning"
+              @click="start(row)"
+            >开始交割</el-button>
+            <el-button
+              v-if="row.status === 'approved' || row.status === 'in_delivery'"
+              link
               type="success"
               @click="complete(row)"
             >完成交割</el-button>
+            <el-button
+              v-if="row.status === 'done' || row.status === 'in_delivery'"
+              link
+              @click="reconcile(row)"
+            >对账</el-button>
+            <el-button
+              v-if="isAdmin && !['reconciled', 'rejected'].includes(row.status)"
+              link
+              type="danger"
+              @click="markDefault(row)"
+            >违约</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -161,7 +251,7 @@ const userLabel = (u) =>
         v-if="isAdmin"
         type="primary"
         style="margin-top: 12px"
-        @click="channelVisible = true"
+        @click="openChannel"
       >新建通道</el-button>
       <el-table :data="channels" style="margin-top: 12px">
         <el-table-column prop="id" label="ID" width="70" />
@@ -180,7 +270,7 @@ const userLabel = (u) =>
     </template>
 
     <template v-else>
-      <el-button type="primary" style="margin-top: 12px" @click="wlVisible = true">开通白名单</el-button>
+      <el-button type="primary" style="margin-top: 12px" @click="openWl">开通白名单</el-button>
       <el-table :data="whitelists" style="margin-top: 12px">
         <el-table-column prop="id" label="ID" width="70" />
         <el-table-column label="账户" :formatter="(r) => userLabel(r.user)" />
@@ -191,18 +281,30 @@ const userLabel = (u) =>
       </el-table>
     </template>
 
-    <el-dialog v-model="channelVisible" title="新建交割通道" width="480px">
+    <el-dialog v-model="channelVisible" title="新建交割通道" width="480px" destroy-on-close>
       <el-form label-width="90px">
-        <el-form-item label="名称"><el-input v-model="channelForm.name" placeholder="如：润泽·H100包月" /></el-form-item>
-        <el-form-item label="供应商">
-          <el-select v-model="channelForm.supplier_id" filterable style="width: 100%">
+        <el-form-item label="供应商" required>
+          <el-select
+            v-model="channelForm.supplier_id"
+            filterable
+            style="width: 100%"
+            @change="suggestChannelName"
+          >
             <el-option v-for="s in suppliers" :key="s.id" :label="s.display_name || s.name" :value="s.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="SKU">
-          <el-select v-model="channelForm.sku_id" filterable style="width: 100%">
+        <el-form-item label="SKU" required>
+          <el-select
+            v-model="channelForm.sku_id"
+            filterable
+            style="width: 100%"
+            @change="suggestChannelName"
+          >
             <el-option v-for="s in skus" :key="s.id" :label="s.name" :value="s.id" />
           </el-select>
+        </el-form-item>
+        <el-form-item label="名称" required>
+          <el-input v-model="channelForm.name" placeholder="自动生成，可改" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -211,15 +313,15 @@ const userLabel = (u) =>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="wlVisible" title="开通白名单" width="480px">
+    <el-dialog v-model="wlVisible" title="开通白名单" width="480px" destroy-on-close>
       <el-form label-width="90px">
-        <el-form-item label="账户">
+        <el-form-item label="账户" required>
           <el-select v-model="wlForm.user_id" filterable style="width: 100%">
             <el-option v-for="u in customers" :key="u.id" :label="userLabel(u)" :value="u.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="启用"><el-switch v-model="wlForm.active" /></el-form-item>
-        <el-form-item label="备注"><el-input v-model="wlForm.note" /></el-form-item>
+        <el-form-item label="备注"><el-input v-model="wlForm.note" placeholder="可选" /></el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="wlVisible = false">取消</el-button>

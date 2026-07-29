@@ -249,7 +249,7 @@ router.get('/skus/:id', async (req, res, next) => {
 
 router.post('/rfqs', ...portalAuth, async (req, res, next) => {
   try {
-    const { sku_id, quantity, duration, delivery_date, budget_range, note, submit_page } =
+    const { sku_id, quantity, duration, delivery_date, budget_range, note, submit_page, region } =
       req.body;
     if (!sku_id || !quantity) throw new AppError('请选择 SKU 并填写数量');
     const sku = await Sku.findByPk(sku_id);
@@ -266,6 +266,9 @@ router.post('/rfqs', ...portalAuth, async (req, res, next) => {
       await req.user.save();
     }
 
+    const { REGION_CODES } = await import('../constants/platform.js');
+    const reg = REGION_CODES.includes(region) ? region : 'shanghai';
+
     const sla = new Date(Date.now() + 6 * 60 * 60 * 1000);
     const rfq = await Rfq.create({
       customer_id: req.user.id,
@@ -277,6 +280,7 @@ router.post('/rfqs', ...portalAuth, async (req, res, next) => {
       note: note || null,
       status: 'pending',
       submit_page: submit_page || null,
+      region: reg,
       sla_deadline: sla,
     });
 

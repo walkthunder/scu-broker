@@ -35,7 +35,7 @@ onMounted(load);
 </script>
 
 <template>
-  <div class="mx-auto max-w-6xl px-4 py-8">
+  <div class="mx-auto max-w-6xl px-4 py-6 sm:py-8">
     <h1 class="page-title">价格指数</h1>
     <p class="page-desc">
       日结算价 S 由平台发布；未发布价格不可用于远期结算。详见
@@ -43,8 +43,40 @@ onMounted(load);
     </p>
     <p v-if="err" class="mt-4 text-sm text-rose-400">{{ err }}</p>
     <p v-else-if="loading" class="mt-4 text-sm text-slate-500">加载中…</p>
-    <div v-else class="mt-6 grid gap-6 lg:grid-cols-2">
-      <div class="panel overflow-hidden">
+    <div v-else class="mt-6 grid gap-4 lg:grid-cols-2 lg:gap-6">
+      <!-- 移动：卡片；桌面：表 -->
+      <div class="space-y-2 md:hidden">
+        <button
+          v-for="row in list"
+          :key="row.id"
+          type="button"
+          class="market-card w-full cursor-pointer text-left transition-colors duration-200"
+          :class="selected?.id === row.id ? 'border-amber-500/50' : ''"
+          @click="open(row)"
+        >
+          <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0">
+              <p class="font-mono text-sm font-semibold text-slate-100">{{ row.code }}</p>
+              <p class="mt-0.5 truncate text-xs text-slate-500">
+                {{ row.sku?.name || row.name }}
+                <span v-if="row.sku?.unit">· {{ row.sku.unit }}</span>
+              </p>
+            </div>
+            <div class="shrink-0 text-right">
+              <p v-if="row.latest_published" class="mono-num text-lg font-semibold text-amber-500">
+                {{ row.latest_published.settle_price }}
+              </p>
+              <p v-else class="text-sm text-slate-500">—</p>
+              <p v-if="row.latest_published" class="font-mono text-[10px] text-slate-500">
+                {{ row.latest_published.date }}
+              </p>
+            </div>
+          </div>
+        </button>
+        <p v-if="!list.length" class="py-8 text-center text-sm text-slate-500">暂无指数</p>
+      </div>
+
+      <div class="panel hidden overflow-x-auto md:block">
         <table class="data-table">
           <thead>
             <tr>
@@ -59,6 +91,7 @@ onMounted(load);
               v-for="row in list"
               :key="row.id"
               class="cursor-pointer hover:bg-slate-800/60"
+              :class="selected?.id === row.id ? 'bg-slate-800/40' : ''"
               @click="open(row)"
             >
               <td class="font-mono">{{ row.code }}</td>
@@ -78,6 +111,7 @@ onMounted(load);
           </tbody>
         </table>
       </div>
+
       <div class="panel p-4">
         <h2 class="mb-3 text-sm font-medium text-slate-300">
           {{ selected ? `${selected.code} 历史结算价` : '选择指数查看历史' }}
@@ -86,24 +120,26 @@ onMounted(load);
           标的 {{ selected.sku?.name || '—' }}
           <span v-if="selected.sku?.unit">（{{ selected.sku.unit }}）</span>
         </p>
-        <table v-if="selected" class="data-table">
-          <thead>
-            <tr>
-              <th>日期</th>
-              <th>结算价 S</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="p in prints" :key="p.date">
-              <td>{{ p.date }}</td>
-              <td class="font-mono">{{ p.settle_price }}</td>
-            </tr>
-            <tr v-if="!prints.length">
-              <td colspan="2" class="py-6 text-center text-slate-500">暂无已发布历史</td>
-            </tr>
-          </tbody>
-        </table>
-        <p v-else class="text-sm text-slate-500">点击左侧一行</p>
+        <div v-if="selected" class="table-scroll">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>日期</th>
+                <th>结算价 S</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="p in prints" :key="p.date">
+                <td>{{ p.date }}</td>
+                <td class="font-mono">{{ p.settle_price }}</td>
+              </tr>
+              <tr v-if="!prints.length">
+                <td colspan="2" class="py-6 text-center text-slate-500">暂无已发布历史</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p v-else class="text-sm text-slate-500">点选上方指数查看历史</p>
       </div>
     </div>
   </div>

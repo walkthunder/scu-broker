@@ -72,63 +72,64 @@ async function seed() {
     {
       name: 'H100',
       type: 'gpu',
-      unit: '小时',
-      spec: '80GB HBM3',
+      unit: '台·月',
+      spec: 'NVIDIA H100 80GB',
       is_hot: true,
       sort_weight: 100,
-      selling_point: '现货充足，24h 可交付',
-      delivery_note: '常见交期 1–3 天，视机房库存而定',
+      selling_point: '进口高端',
     },
     {
-      name: 'H800',
+      name: 'H200',
       type: 'gpu',
-      unit: '小时',
-      spec: '80GB',
+      unit: '台·月',
+      spec: 'NVIDIA H200',
+      is_hot: true,
+      sort_weight: 95,
+      selling_point: '进口旗舰',
+    },
+    {
+      name: 'PPU',
+      type: 'gpu',
+      unit: '台·月',
+      spec: '国产加速卡',
       is_hot: true,
       sort_weight: 90,
-      selling_point: '国产合规优选',
-      delivery_note: '建议提前 2 天锁定',
+      selling_point: '国产加速卡',
     },
     {
-      name: 'A100',
-      type: 'gpu',
-      unit: '小时',
-      spec: '40/80GB',
-      is_hot: true,
-      sort_weight: 80,
-      selling_point: '性价比之选',
-    },
-    { name: 'A800', type: 'gpu', unit: '小时', spec: '80GB', sort_weight: 40 },
-    { name: '昇腾 910B', type: 'gpu', unit: '小时', spec: '国产卡', sort_weight: 50 },
-    {
-      name: 'GPT Token',
+      name: '算力 Token',
       type: 'token',
       unit: '百万token',
-      spec: '主流推理',
+      spec: '综合推理 Token',
       is_hot: true,
-      sort_weight: 70,
-      selling_point: '按量即开',
+      sort_weight: 85,
+      selling_point: '全国综合价',
     },
-    {
-      name: 'DeepSeek Token',
-      type: 'token',
-      unit: '百万token',
-      spec: '国产模型',
-      is_hot: true,
-      sort_weight: 65,
-      selling_point: '国产模型高性价比',
-    },
-    { name: 'L40S', type: 'gpu', unit: '小时', spec: '48GB' },
-    { name: '4090', type: 'gpu', unit: '小时', spec: '24GB' },
+    // 兼容旧演示
     {
       name: 'H100 包月',
       type: 'gpu',
       unit: '月',
       spec: '整机包月',
-      is_hot: true,
-      sort_weight: 85,
-      selling_point: '整机包月更省',
-      delivery_note: '签约后 3–5 个工作日开通',
+      is_hot: false,
+      sort_weight: 40,
+      selling_point: '兼容旧指数',
+    },
+    { name: 'H800', type: 'gpu', unit: '小时', spec: '80GB', sort_weight: 30 },
+    { name: 'A100', type: 'gpu', unit: '小时', spec: '40/80GB', sort_weight: 20 },
+    {
+      name: 'GPT Token',
+      type: 'token',
+      unit: '百万token',
+      is_hot: false,
+      sort_weight: 15,
+    },
+    {
+      name: 'DeepSeek Token',
+      type: 'token',
+      unit: '百万token',
+      is_hot: false,
+      sort_weight: 10,
     },
   ];
   const skus = [];
@@ -137,16 +138,26 @@ async function seed() {
       where: { name: d.name },
       defaults: { ...d, is_public: true, status: 'active' },
     });
-    // 幂等刷新运营字段
     Object.assign(s, {
       is_public: true,
       is_hot: !!d.is_hot,
       sort_weight: d.sort_weight || 0,
+      unit: d.unit || s.unit,
       selling_point: d.selling_point || s.selling_point,
       delivery_note: d.delivery_note || s.delivery_note,
+      status: 'active',
     });
     await s.save();
     skus.push(s);
+  }
+
+  // 非 FRD 主推标的降热度
+  for (const name of ['H800', 'A100', 'GPT Token', 'DeepSeek Token', 'H100 包月']) {
+    const s = skus.find((x) => x.name === name);
+    if (s && !['H100', 'H200', 'PPU', '算力 Token'].includes(s.name)) {
+      s.is_hot = false;
+      await s.save();
+    }
   }
 
   // 隐藏测试 SKU（功能测试残留）
@@ -165,39 +176,52 @@ async function seed() {
 
   const today = todayShanghai();
   const yesterday = addDaysShanghai(today, -1);
+  const regions = ['shanghai', 'neimeng', 'guizhou'];
+  const frdAnchors = {
+    H100: 120000,
+    H200: 145000,
+    PPU: 53000,
+    '算力 Token': 2.05,
+  };
   for (const s of skus) {
-    const base = s.type === 'token' ? 8 : s.unit === '月' ? 80000 : 25;
-    // 昨日：仅缺失时写入
-    await ReferencePrice.findOrCreate({
-      where: { sku_id: s.id, date: yesterday },
-      defaults: {
-        sku_id: s.id,
-        date: yesterday,
-        price_low: base * 0.75,
-        price_mid: base * 0.95,
-        price_high: base * 1.2,
-        source: '人工录入',
-        created_by: admin.id,
-      },
-    });
-    // 今日：对齐种子基准，保证演示价可信（幂等刷新）
-    const [todayRef] = await ReferencePrice.findOrCreate({
-      where: { sku_id: s.id, date: today },
-      defaults: {
-        sku_id: s.id,
-        date: today,
-        price_low: base * 0.8,
-        price_mid: base,
-        price_high: base * 1.3,
-        source: '人工录入',
-        created_by: admin.id,
-      },
-    });
-    todayRef.price_low = base * 0.8;
-    todayRef.price_mid = base;
-    todayRef.price_high = base * 1.3;
-    todayRef.source = '人工录入';
-    await todayRef.save();
+    const base =
+      frdAnchors[s.name] ??
+      (s.type === 'token' ? 8 : s.unit === '月' || s.unit === '台·月' ? 80000 : 25);
+    for (const region of regions) {
+      const regional =
+        region === 'neimeng' ? base * 0.95 : region === 'guizhou' ? base * 0.92 : base;
+      await ReferencePrice.findOrCreate({
+        where: { sku_id: s.id, date: yesterday, region },
+        defaults: {
+          sku_id: s.id,
+          date: yesterday,
+          region,
+          price_low: regional * 0.75,
+          price_mid: regional * 0.95,
+          price_high: regional * 1.2,
+          source: '人工录入',
+          created_by: admin.id,
+        },
+      });
+      const [todayRef] = await ReferencePrice.findOrCreate({
+        where: { sku_id: s.id, date: today, region },
+        defaults: {
+          sku_id: s.id,
+          date: today,
+          region,
+          price_low: regional * 0.8,
+          price_mid: regional,
+          price_high: regional * 1.3,
+          source: '人工录入',
+          created_by: admin.id,
+        },
+      });
+      todayRef.price_low = regional * 0.8;
+      todayRef.price_mid = regional;
+      todayRef.price_high = regional * 1.3;
+      todayRef.source = '人工录入';
+      await todayRef.save();
+    }
   }
 
   const suppliers = [
@@ -325,15 +349,30 @@ async function seed() {
     }
   }
 
-  // 价格指数：多标的（锚定现有 SKU，当日 mid → 已发布 S）
-  const indexDefs = [
-    { code: 'H100-M', name: 'H100 包月结算指数', skuName: 'H100 包月', jump: 20 },
-    { code: 'H100-H', name: 'H100 时租结算指数', skuName: 'H100', jump: 20 },
-    { code: 'H800-H', name: 'H800 时租结算指数', skuName: 'H800', jump: 20 },
-    { code: 'A100-H', name: 'A100 时租结算指数', skuName: 'A100', jump: 25 },
-    { code: 'GPT-T', name: 'GPT Token 结算指数', skuName: 'GPT Token', jump: 30 },
-    { code: 'DS-T', name: 'DeepSeek Token 结算指数', skuName: 'DeepSeek Token', jump: 30 },
+  // 价格指数：FRD 四标的 × 三区域 + 兼容旧代码
+  const frdSkus = ['H100', 'H200', 'PPU', '算力 Token'];
+  const regionCodes = [
+    { code: 'shanghai', tag: 'SH', name: '上海' },
+    { code: 'neimeng', tag: 'NM', name: '内蒙' },
+    { code: 'guizhou', tag: 'GZ', name: '贵州' },
   ];
+  const indexDefs = [];
+  for (const skuName of frdSkus) {
+    for (const r of regionCodes) {
+      const short = skuName === '算力 Token' ? 'TK' : skuName;
+      indexDefs.push({
+        code: `${short}-${r.tag}`,
+        name: `${skuName} ${r.name}结算指数`,
+        skuName,
+        region: r.code,
+        jump: skuName === '算力 Token' ? 30 : 20,
+      });
+    }
+  }
+  indexDefs.push(
+    { code: 'H100-M', name: 'H100 包月结算指数', skuName: 'H100 包月', region: 'shanghai', jump: 20 },
+    { code: 'H100-H', name: 'H100 时租结算指数', skuName: 'H100', region: 'shanghai', jump: 20 },
+  );
   const seededIndices = [];
   for (const def of indexDefs) {
     const sku = skus.find((s) => s.name === def.skuName);
@@ -347,18 +386,20 @@ async function seed() {
         code: def.code,
         name: def.name,
         sku_id: sku.id,
+        region: def.region || 'shanghai',
         status: 'active',
         jump_threshold_pct: def.jump,
       },
     });
-    if (idx.sku_id !== sku.id || idx.status !== 'active' || idx.name !== def.name) {
-      idx.sku_id = sku.id;
-      idx.name = def.name;
-      idx.status = 'active';
-      idx.jump_threshold_pct = def.jump;
-      await idx.save();
-    }
-    const midToday = await ReferencePrice.findOne({ where: { sku_id: sku.id, date: today } });
+    idx.sku_id = sku.id;
+    idx.name = def.name;
+    idx.region = def.region || 'shanghai';
+    idx.status = 'active';
+    idx.jump_threshold_pct = def.jump;
+    await idx.save();
+    const midToday = await ReferencePrice.findOne({
+      where: { sku_id: sku.id, date: today, region: def.region || 'shanghai' },
+    });
     if (midToday) {
       const [print] = await IndexPrint.findOrCreate({
         where: { index_id: idx.id, date: today },
@@ -370,7 +411,6 @@ async function seed() {
           status: 'published',
         },
       });
-      // 当日未锁定则对齐 mid 并发布（保证演示数据可信）
       const used = await SettlementBill.findOne({
         where: { settle_price_date: today },
         include: [
@@ -437,10 +477,94 @@ async function seed() {
     });
   }
 
+  // FRD：配置、账本、伙伴、渠道成交样本、产能
+  const { seedPlatformDefaults } = await import('../src/services/platform-config.js');
+  const { adminDeposit } = await import('../src/services/ledger.js');
+  const { createChannelDeal } = await import('../src/services/channel-deal.js');
+  const { PartnerCapacity } = await import('../src/models/frd-models.js');
+  await seedPlatformDefaults();
+
+  const buyer = await User.findOne({ where: { email: 'buyer@comprix.local' } });
+  if (buyer) {
+    buyer.source = 'friend';
+    await buyer.save();
+    await adminDeposit(buyer.id, 2_000_000, admin.id, '种子入账');
+  }
+
+  const partnerPass = await bcrypt.hash('partner123', 10);
+  const [partnerUser] = await User.findOrCreate({
+    where: { phone: '13900002001' },
+    defaults: {
+      phone: '13900002001',
+      email: 'partner@comprix.local',
+      name: '伙伴·华东',
+      role: 'partner',
+      supplier_id: runze.id,
+      password_hash: partnerPass,
+    },
+  });
+  partnerUser.role = 'partner';
+  partnerUser.supplier_id = runze.id;
+  partnerUser.password_hash = partnerPass;
+  await partnerUser.save();
+
+  for (const skuName of ['H100', 'H200', 'PPU', '算力 Token']) {
+    const sku = skus.find((s) => s.name === skuName);
+    if (!sku) continue;
+    await DeliveryChannel.findOrCreate({
+      where: { name: `润泽·${skuName}交割` },
+      defaults: {
+        name: `润泽·${skuName}交割`,
+        supplier_id: runze.id,
+        sku_id: sku.id,
+        active: true,
+      },
+    });
+    for (const region of ['shanghai', 'neimeng', 'guizhou']) {
+      const [cap] = await PartnerCapacity.findOrCreate({
+        where: { supplier_id: runze.id, sku_id: sku.id, region },
+        defaults: {
+          supplier_id: runze.id,
+          sku_id: sku.id,
+          region,
+          spot_qty: skuName === '算力 Token' ? 100000 : 5000,
+          forward_qty: skuName === '算力 Token' ? 100000 : 5000,
+          rights_qty: 2000,
+          active: true,
+        },
+      });
+      cap.spot_qty = skuName === '算力 Token' ? 100000 : 5000;
+      cap.forward_qty = skuName === '算力 Token' ? 100000 : 5000;
+      cap.rights_qty = 2000;
+      cap.active = true;
+      await cap.save();
+      const mid = await ReferencePrice.findOne({
+        where: { sku_id: sku.id, date: today, region },
+      });
+      if (mid) {
+        for (let i = 0; i < 4; i++) {
+          await createChannelDeal(
+            {
+              sku_id: sku.id,
+              region,
+              qty: 2 + i,
+              unit_price: Number(mid.price_mid) * (0.98 + i * 0.01),
+              deal_status: 'filled',
+              source: 'manual',
+              note: 'seed sample',
+            },
+            admin.id,
+          ).catch(() => null);
+        }
+      }
+    }
+  }
+
   console.log('Seed done.');
   console.log(`Admin login: ${config.admin.phone} / ${config.admin.password}`);
   console.log('Broker login: 13800000001 / broker123');
   console.log('Customer: buyer@comprix.local / Pass1234!  (seller@comprix.local，均已开通交割白名单)');
+  console.log('Partner: partner@comprix.local / partner123 (或手机 13900002001)');
   console.log(
     'Indices:',
     seededIndices.map((x) => x.idx.code).join(', ') || '(none)',

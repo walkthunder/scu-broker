@@ -11,10 +11,16 @@ export const User = sequelize.define(
     email: { type: DataTypes.STRING(200), allowNull: true, unique: true },
     password_hash: { type: DataTypes.STRING(200), allowNull: true },
     role: {
-      type: DataTypes.ENUM('customer', 'broker', 'admin'),
+      type: DataTypes.ENUM('customer', 'broker', 'admin', 'partner'),
       allowNull: false,
       defaultValue: 'customer',
     },
+    source: {
+      type: DataTypes.ENUM('friend', 'partner', 'sales', 'event', 'other'),
+      allowNull: true,
+    },
+    supplier_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+    blacklisted: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
   },
   { tableName: 'users' },
 );
@@ -64,6 +70,7 @@ export const ReferencePrice = sequelize.define(
   {
     id: { type: DataTypes.INTEGER.UNSIGNED, autoIncrement: true, primaryKey: true },
     sku_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+    region: { type: DataTypes.STRING(32), allowNull: false, defaultValue: 'shanghai' },
     date: { type: DataTypes.DATEONLY, allowNull: false },
     price_low: { type: DataTypes.DECIMAL(14, 2), allowNull: false },
     price_mid: { type: DataTypes.DECIMAL(14, 2), allowNull: false },
@@ -71,7 +78,10 @@ export const ReferencePrice = sequelize.define(
     source: { type: DataTypes.STRING(50), allowNull: false, defaultValue: '人工录入' },
     created_by: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
   },
-  { tableName: 'reference_prices' },
+  {
+    tableName: 'reference_prices',
+    indexes: [{ unique: true, fields: ['sku_id', 'region', 'date'] }],
+  },
 );
 
 export const Rfq = sequelize.define(
@@ -85,6 +95,7 @@ export const Rfq = sequelize.define(
     delivery_date: { type: DataTypes.DATEONLY, allowNull: true },
     budget_range: { type: DataTypes.STRING(100), allowNull: true },
     note: { type: DataTypes.TEXT, allowNull: true },
+    region: { type: DataTypes.STRING(32), allowNull: false, defaultValue: 'shanghai' },
     status: {
       type: DataTypes.ENUM('pending', 'quoted', 'confirmed', 'rejected'),
       allowNull: false,
@@ -295,6 +306,7 @@ export const PriceIndex = sequelize.define(
     code: { type: DataTypes.STRING(50), allowNull: false, unique: true },
     name: { type: DataTypes.STRING(200), allowNull: false },
     sku_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+    region: { type: DataTypes.STRING(32), allowNull: false, defaultValue: 'shanghai' },
     status: {
       type: DataTypes.ENUM('active', 'inactive'),
       allowNull: false,
@@ -313,7 +325,7 @@ export const IndexPrint = sequelize.define(
     date: { type: DataTypes.DATEONLY, allowNull: false },
     settle_price: { type: DataTypes.DECIMAL(14, 2), allowNull: false },
     source: {
-      type: DataTypes.ENUM('price_mid', 'manual'),
+      type: DataTypes.ENUM('price_mid', 'manual', 'engine', 'reference'),
       allowNull: false,
       defaultValue: 'price_mid',
     },
@@ -322,6 +334,10 @@ export const IndexPrint = sequelize.define(
       allowNull: false,
       defaultValue: 'draft',
     },
+    sample_count: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+    is_reference: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+    calculated_by: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+    reviewed_by: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
   },
   { tableName: 'index_prints', indexes: [{ unique: true, fields: ['index_id', 'date'] }] },
 );
@@ -334,9 +350,22 @@ export const ForwardContract = sequelize.define(
     buyer_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
     seller_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
     qty: { type: DataTypes.DECIMAL(14, 4), allowNull: false },
-    unit: { type: DataTypes.STRING(50), allowNull: false, defaultValue: '月' },
+    unit: { type: DataTypes.STRING(50), allowNull: false, defaultValue: '台·月' },
     strike_price: { type: DataTypes.DECIMAL(14, 2), allowNull: false },
     expiry_date: { type: DataTypes.DATEONLY, allowNull: false },
+    region: { type: DataTypes.STRING(32), allowNull: false, defaultValue: 'shanghai' },
+    contract_code: { type: DataTypes.STRING(64), allowNull: true },
+    delivery_month: { type: DataTypes.STRING(7), allowNull: true },
+    basis_rate: { type: DataTypes.DECIMAL(8, 2), allowNull: true, defaultValue: -20 },
+    spot_ref_at_open: { type: DataTypes.DECIMAL(14, 2), allowNull: true },
+    margin_initial_pct: { type: DataTypes.DECIMAL(8, 2), allowNull: true, defaultValue: 15 },
+    margin_maintain_pct: { type: DataTypes.DECIMAL(8, 2), allowNull: true, defaultValue: 8 },
+    margin_frozen: { type: DataTypes.DECIMAL(16, 2), allowNull: true, defaultValue: 0 },
+    delivery_intent: {
+      type: DataTypes.ENUM('unset', 'cash', 'physical'),
+      allowNull: false,
+      defaultValue: 'unset',
+    },
     settle_mode: {
       type: DataTypes.ENUM('cash', 'physical'),
       allowNull: false,
@@ -435,19 +464,24 @@ export const DeliveryOrder = sequelize.define(
   'DeliveryOrder',
   {
     id: { type: DataTypes.INTEGER.UNSIGNED, autoIncrement: true, primaryKey: true },
-    contract_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+    contract_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+    right_contract_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
     channel_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
     status: {
-      type: DataTypes.ENUM('pending', 'approved', 'done', 'rejected'),
+      type: DataTypes.ENUM('pending', 'approved', 'in_delivery', 'done', 'rejected', 'reconciled'),
       allowNull: false,
       defaultValue: 'pending',
     },
     order_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+    spot_fill_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+    priority: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+    voucher_path: { type: DataTypes.STRING(500), allowNull: true },
     requested_by: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
     note: { type: DataTypes.TEXT, allowNull: true },
     reviewed_by: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
     reviewed_at: { type: DataTypes.DATE, allowNull: true },
     completed_at: { type: DataTypes.DATE, allowNull: true },
+    reconciled_at: { type: DataTypes.DATE, allowNull: true },
   },
   { tableName: 'delivery_orders' },
 );
@@ -461,6 +495,76 @@ ForwardContract.hasMany(DeliveryOrder, { foreignKey: 'contract_id', as: 'deliver
 DeliveryOrder.belongsTo(DeliveryChannel, { foreignKey: 'channel_id', as: 'channel' });
 DeliveryOrder.belongsTo(User, { foreignKey: 'requested_by', as: 'requester' });
 DeliveryOrder.belongsTo(Order, { foreignKey: 'order_id', as: 'spot_order' });
+
+export {
+  PlatformConfig,
+  ChannelDeal,
+  PriceBulletin,
+  SpotBookOrder,
+  SpotFill,
+  LedgerAccount,
+  LedgerEntry,
+  PartnerCapacity,
+  RightContract,
+  CrmLead,
+  CrmNote,
+  PartnerApplication,
+  MtmStatement,
+} from './frd-models.js';
+
+import {
+  PlatformConfig,
+  ChannelDeal,
+  PriceBulletin,
+  SpotBookOrder,
+  SpotFill,
+  LedgerAccount,
+  LedgerEntry,
+  PartnerCapacity,
+  RightContract,
+  CrmLead,
+  CrmNote,
+  PartnerApplication,
+  MtmStatement,
+} from './frd-models.js';
+
+ChannelDeal.belongsTo(Sku, { foreignKey: 'sku_id', as: 'sku' });
+ChannelDeal.belongsTo(User, { foreignKey: 'created_by', as: 'creator' });
+ChannelDeal.belongsTo(Supplier, { foreignKey: 'supplier_id', as: 'supplier' });
+ChannelDeal.belongsTo(Order, { foreignKey: 'order_id', as: 'order' });
+
+SpotBookOrder.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+SpotBookOrder.belongsTo(Sku, { foreignKey: 'sku_id', as: 'sku' });
+SpotFill.belongsTo(Sku, { foreignKey: 'sku_id', as: 'sku' });
+
+LedgerAccount.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+LedgerAccount.hasMany(LedgerEntry, { foreignKey: 'account_id', as: 'entries' });
+LedgerEntry.belongsTo(LedgerAccount, { foreignKey: 'account_id', as: 'account' });
+
+PartnerCapacity.belongsTo(Supplier, { foreignKey: 'supplier_id', as: 'supplier' });
+PartnerCapacity.belongsTo(Sku, { foreignKey: 'sku_id', as: 'sku' });
+
+RightContract.belongsTo(User, { foreignKey: 'buyer_id', as: 'buyer' });
+RightContract.belongsTo(Sku, { foreignKey: 'sku_id', as: 'sku' });
+RightContract.belongsTo(Supplier, { foreignKey: 'writer_supplier_id', as: 'writer_supplier' });
+RightContract.belongsTo(User, { foreignKey: 'broker_id', as: 'broker' });
+DeliveryOrder.belongsTo(RightContract, { foreignKey: 'right_contract_id', as: 'right_contract' });
+RightContract.hasMany(DeliveryOrder, { foreignKey: 'right_contract_id', as: 'delivery_orders' });
+
+CrmLead.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+CrmLead.belongsTo(User, { foreignKey: 'owner_id', as: 'owner' });
+CrmLead.hasMany(CrmNote, { foreignKey: 'lead_id', as: 'notes' });
+CrmNote.belongsTo(CrmLead, { foreignKey: 'lead_id', as: 'lead' });
+CrmNote.belongsTo(User, { foreignKey: 'author_id', as: 'author' });
+
+PartnerApplication.belongsTo(Supplier, { foreignKey: 'supplier_id', as: 'supplier' });
+PartnerApplication.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+PartnerApplication.belongsTo(User, { foreignKey: 'reviewed_by', as: 'reviewer' });
+
+MtmStatement.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+User.hasMany(MtmStatement, { foreignKey: 'user_id', as: 'mtm_statements' });
+
+User.belongsTo(Supplier, { foreignKey: 'supplier_id', as: 'supplier' });
 
 export const models = {
   User,
@@ -483,4 +587,17 @@ export const models = {
   DeliveryChannel,
   DeliveryWhitelist,
   DeliveryOrder,
+  PlatformConfig,
+  ChannelDeal,
+  PriceBulletin,
+  SpotBookOrder,
+  SpotFill,
+  LedgerAccount,
+  LedgerEntry,
+  PartnerCapacity,
+  RightContract,
+  CrmLead,
+  CrmNote,
+  PartnerApplication,
+  MtmStatement,
 };

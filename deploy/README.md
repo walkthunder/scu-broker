@@ -6,6 +6,7 @@
 |------|-----|
 | 客户前台 | https://computx.webinfra.cloud/scu/ |
 | 管理后台 | https://computx.webinfra.cloud/scu/admin/ |
+| 伙伴门户 | https://computx.webinfra.cloud/scu/partner/ |
 | API 健康检查 | https://computx.webinfra.cloud/scu/api/health |
 
 与同机 Dify（域名根路径 `/`）隔离：仅增加 Nginx `location ^~ /scu*`，不改既有反代。
@@ -51,8 +52,10 @@
 ```bash
 VITE_BASE=/scu/ VITE_API_BASE=/scu/api npm run build --prefix apps/web-customer
 VITE_BASE=/scu/admin/ VITE_API_BASE=/scu/api npm run build --prefix apps/web-admin
-rsync -az --delete apps/web-customer/dist/ root@<host>:/opt/scu-broker/www/scu/
+VITE_BASE=/scu/partner/ VITE_API_BASE=/scu/api npm run build --prefix apps/web-partner
+rsync -az --delete --exclude admin --exclude partner apps/web-customer/dist/ root@<host>:/opt/scu-broker/www/scu/
 rsync -az --delete apps/web-admin/dist/ root@<host>:/opt/scu-broker/www/scu/admin/
+rsync -az --delete apps/web-partner/dist/ root@<host>:/opt/scu-broker/www/scu/partner/
 rsync -az --exclude node_modules --exclude .env apps/api/ root@<host>:/opt/scu-broker/apps/api/
 ```
 

@@ -10,7 +10,7 @@ async function ensureIndexPublished(token, settlePrice, preferredDate) {
   const idx = list.json.data.find((x) => x.code === 'H100-M') || list.json.data[0];
   assert(idx, '需要种子指数');
 
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 90; i++) {
     const date = addDaysShanghai(preferredDate, -i);
     const upsert = await req(`/admin/indices/${idx.id}/prints`, {
       method: 'POST',

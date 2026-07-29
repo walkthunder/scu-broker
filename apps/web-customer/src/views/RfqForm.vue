@@ -59,9 +59,16 @@ const form = reactive({
   delivery_date: '',
   budget_range: '',
   note: '',
+  region: 'shanghai',
   name: user.value?.name || '',
   company_name: user.value?.company_name || '',
 });
+
+const regions = ref([
+  { code: 'shanghai', name: '上海' },
+  { code: 'neimeng', name: '内蒙' },
+  { code: 'guizhou', name: '贵州' },
+]);
 
 function localDatePlusDays(days) {
   const d = new Date();
@@ -130,9 +137,14 @@ function applyDemandDefaults({ force = false } = {}) {
 }
 
 onMounted(async () => {
-  const [skuRes, priceRes] = await Promise.all([api('/customer/skus'), api('/customer/reference-prices')]);
+  const [skuRes, priceRes, regionRes] = await Promise.all([
+    api('/customer/skus'),
+    api('/customer/reference-prices'),
+    api('/frd/meta/regions').catch(() => ({ data: null })),
+  ]);
   skus.value = skuRes.data || [];
   prices.value = priceRes.data || [];
+  if (regionRes.data?.length) regions.value = regionRes.data;
 
   const saved = localStorage.getItem(DRAFT_KEY);
   if (saved) {
@@ -140,7 +152,7 @@ onMounted(async () => {
       const parsed = JSON.parse(saved);
       Object.assign(form, parsed);
     } catch {
-      /* ignore */
+      localStorage.removeItem(DRAFT_KEY);
     }
   }
 
@@ -236,7 +248,7 @@ async function submit() {
 </script>
 
 <template>
-  <div class="mx-auto max-w-6xl px-4 py-8">
+  <div class="mx-auto max-w-6xl px-4 py-6 sm:py-8">
     <h1 class="page-title">提交询价</h1>
     <p class="page-desc">两步完成。参考价仅供对照，成交以正式报价为准。</p>
 
@@ -253,6 +265,13 @@ async function submit() {
             SKU
             <select v-model="form.sku_id" class="mt-1.5 w-full font-mono">
               <option v-for="s in skus" :key="s.id" :value="s.id">{{ s.name }}（{{ s.unit }}）</option>
+            </select>
+          </label>
+
+          <label class="field-label">
+            交付区域
+            <select v-model="form.region" class="mt-1.5 w-full font-mono">
+              <option v-for="r in regions" :key="r.code" :value="r.code">{{ r.name }}</option>
             </select>
           </label>
 

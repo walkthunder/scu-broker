@@ -5,9 +5,10 @@
     "dev:api": "npm run dev --prefix apps/api",
     "dev:customer": "npm run dev --prefix apps/web-customer",
     "dev:admin": "npm run dev --prefix apps/web-admin",
+    "dev:partner": "npm run dev --prefix apps/web-partner",
     "seed": "npm run db:seed --prefix apps/api",
     "seed:demo": "npm run db:seed:demo --prefix apps/api",
     "test": "npm run test:functional --prefix apps/api",
-    "build": "npm run build --prefix apps/web-customer && npm run build --prefix apps/web-admin"
+    "build": "npm run build --prefix apps/web-customer && npm run build --prefix apps/web-admin && npm run build --prefix apps/web-partner"
   }
 }

@@ -54,6 +54,11 @@ watch(
 
 function openCreate() {
   const firstReady = indices.value.find((i) => i.status === 'active' && i.latest_published);
+  const expiry = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 30);
+    return d.toISOString().slice(0, 10);
+  })();
   Object.assign(form, {
     index_id: firstReady?.id || null,
     buyer_id: null,
@@ -61,7 +66,7 @@ function openCreate() {
     qty: 1,
     unit: firstReady?.sku?.unit || '月',
     strike_price: firstReady?.latest_published?.settle_price ?? null,
-    expiry_date: '',
+    expiry_date: expiry,
     note: '',
   });
   visible.value = true;
@@ -70,6 +75,18 @@ function openCreate() {
 async function create() {
   if (!canOpenSelected.value) {
     ElMessage.warning('请选择已有已发布结算价 S 的指数');
+    return;
+  }
+  if (!form.buyer_id || !form.seller_id) {
+    ElMessage.warning('请选择买方与卖方');
+    return;
+  }
+  if (!form.expiry_date) {
+    ElMessage.warning('请选择到期日');
+    return;
+  }
+  if (!(Number(form.strike_price) > 0) || !(Number(form.qty) > 0)) {
+    ElMessage.warning('锁价与数量须大于 0');
     return;
   }
   try {

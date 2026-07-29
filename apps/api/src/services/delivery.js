@@ -176,9 +176,21 @@ export async function requestDelivery(contractId, userId, { channel_id, note } =
 export async function listDeliveryOrders(query = {}) {
   const where = {};
   if (query.status) where.status = query.status;
+  const include = orderInclude.map((inc) => {
+    const copy = { ...inc };
+    if (inc.include) copy.include = inc.include.map((x) => ({ ...x }));
+    return copy;
+  });
+  if (query.supplier_id) {
+    const chInc = include.find((i) => i.association === 'channel');
+    if (chInc) {
+      chInc.where = { ...(chInc.where || {}), supplier_id: Number(query.supplier_id) };
+      chInc.required = true;
+    }
+  }
   return DeliveryOrder.findAll({
     where,
-    include: orderInclude,
+    include,
     order: [['id', 'DESC']],
   });
 }
@@ -194,21 +206,34 @@ export async function approveDelivery(orderId, operatorId) {
       lock: t.LOCK.UPDATE,
     });
     if (!order || order.status !== 'pending') throw new AppError('工单状态已变更');
-    const contract = await ForwardContract.findByPk(order.contract_id, {
-      transaction: t,
-      lock: t.LOCK.UPDATE,
-    });
-    if (!contract || contract.status !== 'open') throw new AppError('合约状态不可交割');
+
+    if (order.contract_id) {
+      const contract = await ForwardContract.findByPk(order.contract_id, {
+        transaction: t,
+        lock: t.LOCK.UPDATE,
+      });
+      if (!contract || contract.status !== 'open') throw new AppError('合约状态不可交割');
+      assertForwardTransition(contract.status, 'delivery_pending');
+      contract.status = 'delivery_pending';
+      contract.settle_mode = 'physical';
+      await contract.save({ transaction: t });
+    } else if (order.right_contract_id) {
+      const { RightContract } = await import('../models/frd-models.js');
+      const right = await RightContract.findByPk(order.right_contract_id, {
+        transaction: t,
+        lock: t.LOCK.UPDATE,
+      });
+      if (!right || right.status !== 'exercised') {
+        throw new AppError('权益状态不可交割（须已行权）');
+      }
+    } else if (!order.spot_fill_id && !order.order_id) {
+      throw new AppError('工单缺少关联合约/成交，无法批准');
+    }
 
     order.status = 'approved';
     order.reviewed_by = operatorId;
     order.reviewed_at = new Date();
     await order.save({ transaction: t });
-
-    assertForwardTransition(contract.status, 'delivery_pending');
-    contract.status = 'delivery_pending';
-    contract.settle_mode = 'physical';
-    await contract.save({ transaction: t });
   });
 
   return DeliveryOrder.findByPk(orderId, { include: orderInclude });
@@ -229,34 +254,189 @@ export async function rejectDelivery(orderId, operatorId, reason) {
 export async function completeDelivery(orderId, operatorId) {
   const row = await DeliveryOrder.findByPk(orderId, { include: orderInclude });
   if (!row) throw new AppError('交割工单不存在', 404);
-  if (row.status !== 'approved') throw new AppError('仅已批准工单可完成');
+  if (!['approved', 'in_delivery'].includes(row.status)) {
+    throw new AppError('仅已批准/交割中工单可完成');
+  }
 
   await sequelize.transaction(async (t) => {
     const order = await DeliveryOrder.findByPk(orderId, {
       transaction: t,
       lock: t.LOCK.UPDATE,
     });
-    if (!order || order.status !== 'approved') throw new AppError('工单状态已变更');
-    const contract = await ForwardContract.findByPk(order.contract_id, {
-      transaction: t,
-      lock: t.LOCK.UPDATE,
-    });
-    if (!contract || contract.status !== 'delivery_pending') {
-      throw new AppError('合约状态不可完成交割');
+    if (!order || !['approved', 'in_delivery'].includes(order.status)) {
+      throw new AppError('工单状态已变更');
+    }
+
+    if (order.contract_id) {
+      const contract = await ForwardContract.findByPk(order.contract_id, {
+        transaction: t,
+        lock: t.LOCK.UPDATE,
+      });
+      if (!contract || contract.status !== 'delivery_pending') {
+        throw new AppError('合约状态不可完成交割');
+      }
+      assertForwardTransition(contract.status, 'delivered');
+      contract.status = 'delivered';
+      contract.settle_mode = 'physical';
+      await contract.save({ transaction: t });
     }
 
     order.status = 'done';
     order.completed_at = new Date();
     if (!order.reviewed_by) order.reviewed_by = operatorId;
     await order.save({ transaction: t });
-
-    assertForwardTransition(contract.status, 'delivered');
-    contract.status = 'delivered';
-    contract.settle_mode = 'physical';
-    await contract.save({ transaction: t });
   });
 
   return DeliveryOrder.findByPk(orderId, { include: orderInclude });
+}
+
+export async function startDelivery(orderId, operatorId) {
+  const order = await DeliveryOrder.findByPk(orderId, {
+    include: orderInclude,
+  });
+  if (!order) throw new AppError('交割工单不存在', 404);
+  if (order.status !== 'approved') throw new AppError('仅已批准工单可进入交割中');
+  order.status = 'in_delivery';
+  if (!order.reviewed_by) order.reviewed_by = operatorId;
+  await order.save();
+  return DeliveryOrder.findByPk(orderId, { include: orderInclude });
+}
+
+export async function uploadDeliveryVoucher(orderId, voucherPath, note, { supplier_id } = {}) {
+  const order = await DeliveryOrder.findByPk(orderId, { include: orderInclude });
+  if (!order) throw new AppError('交割工单不存在', 404);
+  if (supplier_id != null) {
+    const sid = order.channel?.supplier_id ?? order.channel?.supplier?.id;
+    if (Number(sid) !== Number(supplier_id)) {
+      throw new AppError('无权操作该交割工单', 403);
+    }
+  }
+  if (!['approved', 'in_delivery', 'done'].includes(order.status)) {
+    throw new AppError('当前状态不可上传凭证');
+  }
+  order.voucher_path = voucherPath;
+  if (note) order.note = `${order.note || ''}\n[voucher] ${note}`.trim();
+  if (order.status === 'approved') order.status = 'in_delivery';
+  await order.save();
+  return DeliveryOrder.findByPk(orderId, { include: orderInclude });
+}
+
+/** 三方对账完成 → reconciled，可选伙伴收款入账 */
+export async function reconcileDelivery(orderId, operatorId, { partner_pay_amount, partner_user_id } = {}) {
+  return sequelize.transaction(async (t) => {
+    const order = await DeliveryOrder.findByPk(orderId, {
+      transaction: t,
+      lock: t.LOCK.UPDATE,
+      include: orderInclude,
+    });
+    if (!order) throw new AppError('交割工单不存在', 404);
+    if (!['done', 'in_delivery'].includes(order.status)) {
+      throw new AppError('仅已交割/交割中工单可对账');
+    }
+    if (!order.voucher_path && order.status === 'in_delivery') {
+      throw new AppError('请先上传交割凭证');
+    }
+    order.status = 'reconciled';
+    order.reconciled_at = new Date();
+    if (!order.completed_at) order.completed_at = new Date();
+    await order.save({ transaction: t });
+
+    if (partner_pay_amount && Number(partner_pay_amount) > 0 && partner_user_id) {
+      const { postLedger } = await import('./ledger.js');
+      await postLedger(
+        {
+          userId: partner_user_id,
+          type: 'partner_pay',
+          amount: Number(partner_pay_amount),
+          ref_type: 'delivery',
+          ref_id: order.id,
+          note: '交割对账伙伴收款',
+          operatorId,
+          mode: 'available',
+        },
+        t,
+      );
+    }
+    return DeliveryOrder.findByPk(orderId, { include: orderInclude, transaction: t });
+  });
+}
+
+/** 违约：扣划保证金并可选拉黑 */
+export async function defaultDelivery(orderId, operatorId, { reason, blacklist = false, penalty_amount } = {}) {
+  return sequelize.transaction(async (t) => {
+    const order = await DeliveryOrder.findByPk(orderId, {
+      transaction: t,
+      lock: t.LOCK.UPDATE,
+      include: orderInclude,
+    });
+    if (!order) throw new AppError('交割工单不存在', 404);
+    if (['reconciled', 'rejected'].includes(order.status)) {
+      throw new AppError('当前状态不可标记违约');
+    }
+
+    let buyerId = order.requested_by;
+    let margin = Number(penalty_amount) || 0;
+    if (order.contract_id) {
+      const contract = await ForwardContract.findByPk(order.contract_id, {
+        transaction: t,
+        lock: t.LOCK.UPDATE,
+      });
+      if (contract) {
+        buyerId = contract.buyer_id;
+        if (!(margin > 0)) margin = Number(contract.margin_frozen) || 0;
+        if (margin > 0 && Number(contract.margin_frozen) > 0) {
+          const { postLedger } = await import('./ledger.js');
+          const use = Math.min(margin, Number(contract.margin_frozen));
+          await postLedger(
+            {
+              userId: buyerId,
+              type: 'penalty',
+              amount: use,
+              ref_type: 'delivery',
+              ref_id: order.id,
+              note: reason || '交割违约扣划保证金',
+              operatorId,
+              mode: 'unfreeze_debit',
+            },
+            t,
+          );
+          contract.margin_frozen = Number(contract.margin_frozen) - use;
+          await contract.save({ transaction: t });
+        }
+      }
+    } else if (margin > 0 && buyerId) {
+      const { postLedger } = await import('./ledger.js');
+      await postLedger(
+        {
+          userId: buyerId,
+          type: 'penalty',
+          amount: margin,
+          ref_type: 'delivery',
+          ref_id: order.id,
+          note: reason || '交割违约扣款',
+          operatorId,
+          mode: 'debit',
+        },
+        t,
+      );
+    }
+
+    order.status = 'rejected';
+    order.reviewed_by = operatorId;
+    order.reviewed_at = new Date();
+    order.note = `${order.note || ''}\n[default] ${reason || '违约处置'}`.trim();
+    await order.save({ transaction: t });
+
+    if (blacklist && buyerId) {
+      const user = await User.findByPk(buyerId, { transaction: t, lock: t.LOCK.UPDATE });
+      if (user) {
+        user.blacklisted = true;
+        await user.save({ transaction: t });
+      }
+    }
+
+    return DeliveryOrder.findByPk(orderId, { include: orderInclude, transaction: t });
+  });
 }
 
 export async function deliveryRatioStats() {
@@ -280,7 +460,7 @@ export async function shouldSkipCashSettle(contractId) {
   const active = await DeliveryOrder.findOne({
     where: {
       contract_id: contractId,
-      status: { [Op.in]: ['pending', 'approved'] },
+      status: { [Op.in]: ['pending', 'approved', 'in_delivery'] },
     },
   });
   return !!active;

@@ -188,6 +188,9 @@ router.put('/skus/:id', ...staff, async (req, res, next) => {
       if (req.user.role !== 'admin' && !brokerSafe.includes(f)) continue;
       sku[f] = req.body[f];
     }
+    if (req.body.name !== undefined && !String(sku.name || '').trim()) {
+      throw new AppError('名称必填');
+    }
     await sku.save();
     ok(res, sku);
   } catch (e) {
@@ -266,6 +269,7 @@ router.get('/reference-prices', ...staff, async (req, res, next) => {
     const where = {};
     if (req.query.date) where.date = req.query.date;
     if (req.query.sku_id) where.sku_id = req.query.sku_id;
+    where.region = req.query.region || 'shanghai';
     const list = await ReferencePrice.findAll({
       where,
       include: [{ model: Sku, as: 'sku' }],
@@ -283,24 +287,35 @@ router.get('/reference-prices', ...staff, async (req, res, next) => {
 
 router.post('/reference-prices', ...staff, async (req, res, next) => {
   try {
-    const { sku_id, date, price_low, price_mid, price_high } = req.body;
+    const { sku_id, date, price_low, price_mid, price_high, region } = req.body;
     if (!sku_id || !date || price_low == null || price_mid == null || price_high == null) {
       throw new AppError('请填写完整参考价');
     }
-    let row = await ReferencePrice.findOne({ where: { sku_id, date } });
+    const reg = region || 'shanghai';
+    const low = Number(price_low);
+    const mid = Number(price_mid);
+    const high = Number(price_high);
+    if (!(low > 0) || !(mid > 0) || !(high > 0)) {
+      throw new AppError('参考价须大于 0');
+    }
+    if (!(low <= mid && mid <= high)) {
+      throw new AppError('须满足：低 ≤ 中 ≤ 高');
+    }
+    let row = await ReferencePrice.findOne({ where: { sku_id, date, region: reg } });
     if (row) {
-      row.price_low = price_low;
-      row.price_mid = price_mid;
-      row.price_high = price_high;
+      row.price_low = low;
+      row.price_mid = mid;
+      row.price_high = high;
       row.created_by = req.user.id;
       await row.save();
     } else {
       row = await ReferencePrice.create({
         sku_id,
         date,
-        price_low,
-        price_mid,
-        price_high,
+        region: reg,
+        price_low: low,
+        price_mid: mid,
+        price_high: high,
         source: '人工录入',
         created_by: req.user.id,
       });
@@ -361,6 +376,7 @@ router.post('/quotes', ...staff, async (req, res, next) => {
     if (!rfq_id || !supplier_id || price == null) {
       throw new AppError('请填写询价、供应商和成交价');
     }
+    if (!(Number(price) > 0)) throw new AppError('成交价须大于 0');
     const rfq = await Rfq.findByPk(rfq_id);
     if (!rfq) throw new AppError('询价不存在', 404);
     if (['confirmed', 'rejected'].includes(rfq.status)) {
@@ -479,6 +495,8 @@ router.put('/orders/:id/status', ...staff, async (req, res, next) => {
     });
     if (status === '已完成') {
       await ensureDealFeedDraft(order.id);
+      const { ingestOrderAsChannelDeal } = await import('../services/channel-deal.js');
+      await ingestOrderAsChannelDeal(order.id);
     }
     ok(res, order);
   } catch (e) {

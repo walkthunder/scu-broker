@@ -92,11 +92,23 @@ export async function presentForward(row, { markToMarket = true, viewerUserId = 
   }
   j.delivery_window_open =
     canRequestDelivery(j) && isInDeliveryWindow(j.expiry_date);
+  try {
+    const { getPlatformParams } = await import('./platform-config.js');
+    const { addDaysShanghai, todayShanghai } = await import('../utils/market.js');
+    const params = await getPlatformParams();
+    const n = Number(params.intent_days_before_expiry || 7);
+    const today = todayShanghai();
+    const start = addDaysShanghai(j.expiry_date, -n);
+    j.intent_window_open =
+      j.status === 'open' && today >= start && today <= j.expiry_date;
+  } catch {
+    j.intent_window_open = false;
+  }
   return j;
 }
 
 export async function createForward(body, brokerId) {
-  const {
+  let {
     index_id,
     buyer_id,
     seller_id,
@@ -107,9 +119,12 @@ export async function createForward(body, brokerId) {
     settle_mode,
     note,
     confirm_hours,
+    region,
+    presale,
+    tenor_months,
   } = body;
-  if (!index_id || !buyer_id || !seller_id || qty == null || !strike_price || !expiry_date) {
-    throw new AppError('index_id、buyer_id、seller_id、qty、strike_price、expiry_date 必填');
+  if (!index_id || !buyer_id || !seller_id || qty == null || !strike_price) {
+    throw new AppError('index_id、buyer_id、seller_id、qty、strike_price 必填');
   }
   if (Number(buyer_id) === Number(seller_id)) throw new AppError('买方与卖方不能为同一人');
   if (!(Number(qty) > 0)) throw new AppError('数量须大于 0');
@@ -130,128 +145,296 @@ export async function createForward(body, brokerId) {
     throw new AppError('开仓默认现金结算，请到期前在窗口内申请实物交割');
   }
 
+  const { getPlatformParams } = await import('./platform-config.js');
+  const { suggestPresalePrice } = await import('./index-engine.js');
+  const { addMonthsShanghai, todayShanghai } = await import('../utils/market.js');
+  const params = await getPlatformParams();
+
+  // FRD 预售：默认固定 6 月交割；测试可用 tenor_months / 显式 expiry_date 覆盖
+  if (presale || (!expiry_date && tenor_months == null)) {
+    const months = Number(tenor_months > 0 ? tenor_months : params.presale_months);
+    expiry_date = addMonthsShanghai(todayShanghai(), months);
+  }
+  if (!expiry_date) throw new AppError('expiry_date 必填');
+
+  const spot = Number(latestS.settle_price);
+  const band = suggestPresalePrice(spot, params);
+  const x = Number(strike_price);
+  if (x < band.low * 0.85 || x > band.high * 1.15) {
+    throw new AppError(
+      `预售价偏离基差带过多（建议 ${band.low}-${band.high}，现货 ${spot}）`,
+    );
+  }
+
   const hours = Number(confirm_hours) > 0 ? Number(confirm_hours) : CONFIRM_HOURS;
   const deadline = new Date(Date.now() + hours * 3600 * 1000);
+  const reg = region || index.region || 'shanghai';
+  const expiry = new Date(expiry_date);
+  const deliveryMonth = `${expiry.getUTCFullYear()}-${String(expiry.getUTCMonth() + 1).padStart(2, '0')}`;
+  const code = `PS-${index.code}-${deliveryMonth}-${Date.now().toString(36).slice(-4)}`;
+  const marginPct = Number(params.margin_initial_pct);
+  const notional = x * Number(qty);
+  const marginFrozen = Math.round(notional * (marginPct / 100) * 100) / 100;
 
-  const contract = await ForwardContract.create({
-    index_id: Number(index_id),
-    buyer_id: Number(buyer_id),
-    seller_id: Number(seller_id),
-    qty: Number(qty),
-    unit: unit || '月',
-    strike_price: Number(strike_price),
-    expiry_date,
-    settle_mode: 'cash',
-    status: 'pending_confirm',
-    broker_id: brokerId || null,
-    confirm_deadline_at: deadline,
-    note: note || null,
+  const { assertBuyingPower, postLedger } = await import('./ledger.js');
+  const { assertNotUnderMarginBlock } = await import('./margin-monitor.js');
+  const { assertCapacity } = await import('./partner-capacity.js');
+  await assertNotUnderMarginBlock(buyer_id);
+
+  return sequelize.transaction(async (t) => {
+    await assertBuyingPower(buyer_id, marginFrozen, t);
+    if (index.sku_id) {
+      await assertCapacity('forward', index.sku_id, reg, qty, t);
+    }
+    const contract = await ForwardContract.create(
+      {
+        index_id: Number(index_id),
+        buyer_id: Number(buyer_id),
+        seller_id: Number(seller_id),
+        qty: Number(qty),
+        unit: unit || '台·月',
+        strike_price: x,
+        expiry_date,
+        region: reg,
+        contract_code: code,
+        delivery_month: deliveryMonth,
+        basis_rate: params.presale_basis_pct,
+        spot_ref_at_open: spot,
+        margin_initial_pct: marginPct,
+        margin_maintain_pct: params.margin_maintain_pct,
+        margin_frozen: marginFrozen,
+        settle_mode: 'cash',
+        status: 'pending_confirm',
+        broker_id: brokerId || null,
+        confirm_deadline_at: deadline,
+        note: note || null,
+      },
+      { transaction: t },
+    );
+
+    await postLedger(
+      {
+        userId: buyer_id,
+        type: 'margin_freeze',
+        amount: marginFrozen,
+        ref_type: 'forward',
+        ref_id: contract.id,
+        note: '预售初始保证金',
+        mode: 'freeze',
+      },
+      t,
+    );
+
+    const full = await ForwardContract.findByPk(contract.id, {
+      include: contractInclude,
+      transaction: t,
+    });
+    await notifyForwardPendingConfirm(full);
+    return full;
   });
-
-  const full = await ForwardContract.findByPk(contract.id, { include: contractInclude });
-  await notifyForwardPendingConfirm(full);
-  return full;
 }
 
-async function tryOpen(contract) {
+export async function setDeliveryIntent(contractId, userId, intent) {
+  if (!['cash', 'physical'].includes(intent)) throw new AppError('intent 须为 cash 或 physical');
+  const contract = await ForwardContract.findByPk(contractId, { include: contractInclude });
+  if (!contract) throw new AppError('合约不存在', 404);
+  if (contract.status !== 'open') throw new AppError('仅持仓中可确认交割意愿');
+  if (Number(userId) !== Number(contract.buyer_id)) throw new AppError('仅买方可确认意愿', 403);
+  const { getPlatformParams } = await import('./platform-config.js');
+  const { addDaysShanghai, todayShanghai } = await import('../utils/market.js');
+  const params = await getPlatformParams();
+  const n = Number(params.intent_days_before_expiry || 7);
+  const windowStart = addDaysShanghai(contract.expiry_date, -n);
+  const today = todayShanghai();
+  if (today < windowStart || today > contract.expiry_date) {
+    throw new AppError(`交割意愿确认窗口为到期前 ${n} 天至到期日（${windowStart} ~ ${contract.expiry_date}）`);
+  }
+  contract.delivery_intent = intent;
+  await contract.save();
+  return presentForward(contract, { viewerUserId: userId });
+}
+
+async function tryOpen(contract, transaction) {
   if (contract.buyer_confirmed_at && contract.seller_confirmed_at) {
     assertForwardTransition(contract.status, 'open');
     contract.status = 'open';
-    await contract.save();
-    const full = await ForwardContract.findByPk(contract.id, { include: contractInclude });
+    await contract.save({ transaction });
+    const full = await ForwardContract.findByPk(contract.id, {
+      include: contractInclude,
+      transaction,
+    });
     await notifyForwardOpened(full);
     return full;
   }
   return contract;
 }
 
-function cancelIfPastDeadline(contract) {
+async function cancelIfPastDeadline(contract, transaction) {
   if (contract.confirm_deadline_at && new Date(contract.confirm_deadline_at) < new Date()) {
     assertForwardTransition(contract.status, 'cancelled');
     contract.status = 'cancelled';
     contract.cancel_reason = '确认超时自动取消';
+    if (Number(contract.margin_frozen) > 0) {
+      const { postLedger } = await import('./ledger.js');
+      await postLedger(
+        {
+          userId: contract.buyer_id,
+          type: 'margin_release',
+          amount: Number(contract.margin_frozen),
+          ref_type: 'forward',
+          ref_id: contract.id,
+          note: '预售超时释放保证金',
+          mode: 'release',
+        },
+        transaction,
+      );
+      contract.margin_frozen = 0;
+    }
     return true;
   }
   return false;
 }
 
 export async function confirmForward(contractId, userId) {
-  const contract = await ForwardContract.findByPk(contractId, { include: contractInclude });
-  if (!contract) throw new AppError('合约不存在', 404);
-  if (contract.status !== 'pending_confirm') throw new AppError('当前状态不可确认');
-  if (cancelIfPastDeadline(contract)) {
-    await contract.save();
-    throw new AppError('已超过确认截止时间，合约已取消');
-  }
+  const result = await sequelize.transaction(async (t) => {
+    const contract = await ForwardContract.findByPk(contractId, {
+      include: contractInclude,
+      transaction: t,
+      lock: t.LOCK.UPDATE,
+    });
+    if (!contract) throw new AppError('合约不存在', 404);
+    if (contract.status !== 'pending_confirm') throw new AppError('当前状态不可确认');
+    if (await cancelIfPastDeadline(contract, t)) {
+      await contract.save({ transaction: t });
+      return { timedOut: true };
+    }
 
-  const uid = Number(userId);
-  if (uid === Number(contract.buyer_id)) {
-    if (contract.buyer_confirmed_at) throw new AppError('买方已确认');
-    contract.buyer_confirmed_at = new Date();
-    contract.buyer_confirm_by = uid;
-  } else if (uid === Number(contract.seller_id)) {
-    if (contract.seller_confirmed_at) throw new AppError('卖方已确认');
-    contract.seller_confirmed_at = new Date();
-    contract.seller_confirm_by = uid;
-  } else {
-    throw new AppError('仅买方或卖方可确认', 403);
-  }
-  await contract.save();
-  return tryOpen(contract);
+    const uid = Number(userId);
+    if (uid === Number(contract.buyer_id)) {
+      if (contract.buyer_confirmed_at) throw new AppError('买方已确认');
+      contract.buyer_confirmed_at = new Date();
+      contract.buyer_confirm_by = uid;
+    } else if (uid === Number(contract.seller_id)) {
+      if (contract.seller_confirmed_at) throw new AppError('卖方已确认');
+      contract.seller_confirmed_at = new Date();
+      contract.seller_confirm_by = uid;
+    } else {
+      throw new AppError('仅买方或卖方可确认', 403);
+    }
+    await contract.save({ transaction: t });
+    return { timedOut: false, contract: await tryOpen(contract, t) };
+  });
+  if (result.timedOut) throw new AppError('已超过确认截止时间，合约已取消');
+  return result.contract;
 }
 
 export async function proxyConfirm(contractId, { side, note }, operatorId) {
   if (!note || !String(note).trim()) throw new AppError('代理确认必须填写备注');
   if (!['buyer', 'seller'].includes(side)) throw new AppError('side 须为 buyer 或 seller');
 
-  const contract = await ForwardContract.findByPk(contractId, { include: contractInclude });
-  if (!contract) throw new AppError('合约不存在', 404);
-  if (contract.status !== 'pending_confirm') throw new AppError('当前状态不可确认');
-  if (cancelIfPastDeadline(contract)) {
-    await contract.save();
-    throw new AppError('已超过确认截止时间，合约已取消');
-  }
+  const result = await sequelize.transaction(async (t) => {
+    const contract = await ForwardContract.findByPk(contractId, {
+      include: contractInclude,
+      transaction: t,
+      lock: t.LOCK.UPDATE,
+    });
+    if (!contract) throw new AppError('合约不存在', 404);
+    if (contract.status !== 'pending_confirm') throw new AppError('当前状态不可确认');
+    if (await cancelIfPastDeadline(contract, t)) {
+      await contract.save({ transaction: t });
+      return { timedOut: true };
+    }
 
-  const now = new Date();
-  if (side === 'buyer') {
-    if (contract.buyer_confirmed_at) throw new AppError('买方已确认');
-    contract.buyer_confirmed_at = now;
-    contract.buyer_confirm_by = operatorId;
-  } else {
-    if (contract.seller_confirmed_at) throw new AppError('卖方已确认');
-    contract.seller_confirmed_at = now;
-    contract.seller_confirm_by = operatorId;
-  }
-  const existing = contract.note || '';
-  contract.note = `${existing}\n[proxy-confirm ${side}] ${String(note).trim()}`.trim();
-  await contract.save();
-  return tryOpen(contract);
+    const now = new Date();
+    if (side === 'buyer') {
+      if (contract.buyer_confirmed_at) throw new AppError('买方已确认');
+      contract.buyer_confirmed_at = now;
+      contract.buyer_confirm_by = operatorId;
+    } else {
+      if (contract.seller_confirmed_at) throw new AppError('卖方已确认');
+      contract.seller_confirmed_at = now;
+      contract.seller_confirm_by = operatorId;
+    }
+    const existing = contract.note || '';
+    contract.note = `${existing}\n[proxy-confirm ${side}] ${String(note).trim()}`.trim();
+    await contract.save({ transaction: t });
+    return { timedOut: false, contract: await tryOpen(contract, t) };
+  });
+  if (result.timedOut) throw new AppError('已超过确认截止时间，合约已取消');
+  return result.contract;
 }
 
 export async function cancelForward(contractId, reason) {
-  const contract = await ForwardContract.findByPk(contractId);
-  if (!contract) throw new AppError('合约不存在', 404);
-  if (contract.status !== 'pending_confirm') throw new AppError('仅待确认合约可作废');
-  assertForwardTransition(contract.status, 'cancelled');
-  contract.status = 'cancelled';
-  contract.cancel_reason = reason || 'Broker 作废';
-  await contract.save();
-  return contract;
+  const { postLedger } = await import('./ledger.js');
+  return sequelize.transaction(async (t) => {
+    const contract = await ForwardContract.findByPk(contractId, {
+      transaction: t,
+      lock: t.LOCK.UPDATE,
+    });
+    if (!contract) throw new AppError('合约不存在', 404);
+    if (contract.status !== 'pending_confirm') throw new AppError('仅待确认合约可作废');
+    assertForwardTransition(contract.status, 'cancelled');
+    contract.status = 'cancelled';
+    contract.cancel_reason = reason || 'Broker 作废';
+    await contract.save({ transaction: t });
+    if (Number(contract.margin_frozen) > 0) {
+      await postLedger(
+        {
+          userId: contract.buyer_id,
+          type: 'margin_release',
+          amount: Number(contract.margin_frozen),
+          ref_type: 'forward',
+          ref_id: contract.id,
+          note: '预售作废释放保证金',
+          mode: 'release',
+        },
+        t,
+      );
+      contract.margin_frozen = 0;
+      await contract.save({ transaction: t });
+    }
+    return contract;
+  });
 }
 
 export async function expirePendingConfirms(now = new Date()) {
-  const [n] = await ForwardContract.update(
-    {
-      status: 'cancelled',
-      cancel_reason: '确认超时自动取消',
+  const { postLedger } = await import('./ledger.js');
+  const stale = await ForwardContract.findAll({
+    where: {
+      status: 'pending_confirm',
+      confirm_deadline_at: { [Op.lt]: now },
     },
-    {
-      where: {
-        status: 'pending_confirm',
-        confirm_deadline_at: { [Op.lt]: now },
-      },
-    },
-  );
+  });
+  let n = 0;
+  for (const c of stale) {
+    await sequelize.transaction(async (t) => {
+      const contract = await ForwardContract.findByPk(c.id, {
+        transaction: t,
+        lock: t.LOCK.UPDATE,
+      });
+      if (!contract || contract.status !== 'pending_confirm') return;
+      contract.status = 'cancelled';
+      contract.cancel_reason = '确认超时自动取消';
+      await contract.save({ transaction: t });
+      if (Number(contract.margin_frozen) > 0) {
+        await postLedger(
+          {
+            userId: contract.buyer_id,
+            type: 'margin_release',
+            amount: Number(contract.margin_frozen),
+            ref_type: 'forward',
+            ref_id: contract.id,
+            note: '预售超时释放保证金',
+            mode: 'release',
+          },
+          t,
+        );
+        contract.margin_frozen = 0;
+        await contract.save({ transaction: t });
+      }
+      n += 1;
+    });
+  }
   return n;
 }
 
@@ -328,6 +511,22 @@ export async function settleOne(contractId, { asOf = todayShanghai() } = {}) {
       { transaction: t },
     );
     locked.status = 'settled';
+    if (Number(locked.margin_frozen) > 0) {
+      const { postLedger } = await import('./ledger.js');
+      await postLedger(
+        {
+          userId: locked.buyer_id,
+          type: 'margin_release',
+          amount: Number(locked.margin_frozen),
+          ref_type: 'forward',
+          ref_id: locked.id,
+          note: '预售结算释放保证金',
+          mode: 'release',
+        },
+        t,
+      );
+      locked.margin_frozen = 0;
+    }
     await locked.save({ transaction: t });
     return { bill, ...settled };
   });
@@ -378,16 +577,60 @@ export async function settleBatch({ asOf = todayShanghai() } = {}) {
 }
 
 export async function confirmBillPay(billId, operatorId) {
-  const bill = await SettlementBill.findByPk(billId, {
-    include: [{ association: 'contract', include: contractInclude }],
+  return sequelize.transaction(async (t) => {
+    const bill = await SettlementBill.findByPk(billId, {
+      include: [{ association: 'contract', include: contractInclude }],
+      transaction: t,
+      lock: t.LOCK.UPDATE,
+    });
+    if (!bill) throw new AppError('账单不存在', 404);
+    if (bill.pay_status === 'done') throw new AppError('已确认收付');
+    const contract = bill.contract;
+    if (!contract) throw new AppError('账单无关联合约');
+
+    const amt = Number(bill.amount);
+    if (amt > 0 && bill.pay_direction !== 'none') {
+      const { postLedger } = await import('./ledger.js');
+      const payer =
+        bill.pay_direction === 'buyer_to_seller' ? contract.buyer_id : contract.seller_id;
+      const payee =
+        bill.pay_direction === 'buyer_to_seller' ? contract.seller_id : contract.buyer_id;
+      await postLedger(
+        {
+          userId: payer,
+          type: 'settle',
+          amount: amt,
+          ref_type: 'settlement_bill',
+          ref_id: bill.id,
+          note: '远期差价结算扣款',
+          operatorId,
+          mode: 'debit',
+        },
+        t,
+      );
+      await postLedger(
+        {
+          userId: payee,
+          type: 'settle',
+          amount: amt,
+          ref_type: 'settlement_bill',
+          ref_id: bill.id,
+          note: '远期差价结算入账',
+          operatorId,
+          mode: 'available',
+        },
+        t,
+      );
+    }
+
+    bill.pay_status = 'done';
+    bill.confirmed_by = operatorId;
+    bill.confirmed_at = new Date();
+    await bill.save({ transaction: t });
+    const j = bill.toJSON();
+    j.ledger_posted = amt > 0 && bill.pay_direction !== 'none';
+    return j;
   });
-  if (!bill) throw new AppError('账单不存在', 404);
-  if (bill.pay_status === 'done') throw new AppError('已确认收付');
-  bill.pay_status = 'done';
-  bill.confirmed_by = operatorId;
-  bill.confirmed_at = new Date();
-  await bill.save();
-  return bill;
 }
 
 export async function listBillsAdmin() {

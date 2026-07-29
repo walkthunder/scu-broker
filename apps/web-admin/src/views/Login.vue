@@ -24,20 +24,35 @@ async function submit() {
 </script>
 
 <template>
-  <div style="min-height: 100vh; display: grid; place-items: center; background: #f5f7fa">
-    <el-card style="width: 380px">
-      <h2 style="margin: 0 0 16px">CompriX 管理后台</h2>
-      <el-form @submit.prevent="submit">
+  <div class="login-page">
+    <div class="login-card">
+      <div class="login-brand">
+        <span class="admin-brand-mark" aria-hidden="true" />
+        <div class="login-brand-name">CompriX</div>
+      </div>
+      <h1 class="login-title">管理后台</h1>
+      <p class="login-desc">Broker / Admin 登录。线下谈价，系统记录状态与账务。</p>
+      <el-form label-position="top" @submit.prevent="submit">
         <el-form-item label="手机号 / 邮箱">
-          <el-input v-model="form.phone" placeholder="13800000000 或 admin@comprix.local" />
+          <el-input
+            v-model="form.phone"
+            placeholder="13800000000 或 admin@comprix.local"
+            size="large"
+          />
         </el-form-item>
         <el-form-item label="密码">
-          <el-input v-model="form.password" type="password" show-password />
+          <el-input v-model="form.password" type="password" show-password size="large" />
         </el-form-item>
-        <el-button type="primary" :loading="loading" style="width: 100%" @click="submit">
+        <el-button
+          type="primary"
+          size="large"
+          :loading="loading"
+          style="width: 100%; margin-top: 8px"
+          @click="submit"
+        >
           登录
         </el-button>
       </el-form>
-    </el-card>
+    </div>
   </div>
 </template>

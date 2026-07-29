@@ -3,6 +3,12 @@ import { onMounted, reactive, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { api } from '../api';
 
+const THEMES = [
+  { label: '深色琥珀', bg: '#1e293b', text: '#f8fafc' },
+  { label: '琥珀强调', bg: '#78350f', text: '#fef3c7' },
+  { label: '冷静蓝', bg: '#0c4a6e', text: '#e0f2fe' },
+];
+
 const list = ref([]);
 const visible = ref(false);
 const form = reactive({
@@ -53,9 +59,18 @@ function open(row) {
   visible.value = true;
 }
 
+function applyTheme(t) {
+  form.bg_color = t.bg;
+  form.text_color = t.text;
+}
+
 async function save() {
+  if (!String(form.title || '').trim()) {
+    ElMessage.warning('请填写标题');
+    return;
+  }
   try {
-    const body = { ...form };
+    const body = { ...form, title: String(form.title).trim() };
     if (!body.start_time) body.start_time = null;
     if (!body.end_time) body.end_time = null;
     if (form.id) await api(`/admin/announcements/${form.id}`, { method: 'PUT', body });
@@ -82,8 +97,11 @@ async function remove(row) {
 
 <template>
   <div>
-    <div style="display: flex; justify-content: space-between">
-      <h2>通告管理</h2>
+    <div style="display: flex; justify-content: space-between; align-items: center">
+      <div>
+        <h2>通告管理</h2>
+        <p class="page-desc">标题必填；排期与配色可选，配色可用预设。</p>
+      </div>
       <el-button type="primary" @click="open()">新建通告</el-button>
     </div>
     <el-table :data="list" style="margin-top: 12px">
@@ -101,13 +119,42 @@ async function remove(row) {
         </template>
       </el-table-column>
     </el-table>
-    <el-dialog v-model="visible" title="通告" width="560px">
+    <el-dialog v-model="visible" :title="form.id ? '编辑通告' : '新建通告'" width="560px" destroy-on-close>
       <el-form label-width="90px">
-        <el-form-item label="标题"><el-input v-model="form.title" /></el-form-item>
-        <el-form-item label="内容"><el-input v-model="form.content" type="textarea" rows="3" /></el-form-item>
+        <el-form-item label="标题" required>
+          <el-input v-model="form.title" maxlength="80" />
+        </el-form-item>
+        <el-form-item label="内容">
+          <el-input v-model="form.content" type="textarea" rows="3" placeholder="可选" />
+        </el-form-item>
         <el-form-item label="启用"><el-switch v-model="form.is_active" /></el-form-item>
-        <el-form-item label="背景色"><el-input v-model="form.bg_color" /></el-form-item>
-        <el-form-item label="文字色"><el-input v-model="form.text_color" /></el-form-item>
+        <el-form-item label="开始时间">
+          <el-date-picker
+            v-model="form.start_time"
+            type="datetime"
+            value-format="YYYY-MM-DD HH:mm:ss"
+            style="width: 100%"
+            placeholder="空=立即"
+          />
+        </el-form-item>
+        <el-form-item label="结束时间">
+          <el-date-picker
+            v-model="form.end_time"
+            type="datetime"
+            value-format="YYYY-MM-DD HH:mm:ss"
+            style="width: 100%"
+            placeholder="空=不限期"
+          />
+        </el-form-item>
+        <el-form-item label="配色预设">
+          <div style="display: flex; flex-wrap: wrap; gap: 8px">
+            <el-button v-for="t in THEMES" :key="t.label" size="small" @click="applyTheme(t)">
+              {{ t.label }}
+            </el-button>
+          </div>
+        </el-form-item>
+        <el-form-item label="背景色"><el-input v-model="form.bg_color" style="width: 160px" /></el-form-item>
+        <el-form-item label="文字色"><el-input v-model="form.text_color" style="width: 160px" /></el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="visible = false">取消</el-button>

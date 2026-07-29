@@ -7,7 +7,9 @@ const POLL_MS = 30_000;
 const router = useRouter();
 const list = ref([]);
 const hot = ref([]);
+const indices = ref([]);
 const announcement = ref(null);
+const bulletin = ref(null);
 const pulse = ref(null);
 const feeds = ref([]);
 const err = ref('');
@@ -26,6 +28,11 @@ const filtered = computed(() => {
   if (filter.value === 'all') return list.value;
   return list.value.filter((r) => r.type === filter.value);
 });
+
+/** 已发布结算价的指数（首页速览，完整列表在 /indices） */
+const publishedIndices = computed(() =>
+  (indices.value || []).filter((i) => i.latest_published),
+);
 
 const syncAgeText = computed(() => {
   if (!lastSyncedAt.value) return '—';
@@ -99,12 +106,14 @@ async function loadMarket({ silent = false } = {}) {
   if (!silent) loading.value = true;
   else refreshing.value = true;
   try {
-    const [prices, hots, ann, pul, feed] = await Promise.all([
+    const [prices, hots, ann, pul, feed, idx, bull] = await Promise.all([
       api('/customer/reference-prices'),
       api('/customer/hot-skus'),
       api('/customer/announcement'),
       api('/customer/market-pulse'),
       api('/customer/deal-feeds'),
+      api('/customer/indices'),
+      api('/frd/price-bulletins/latest').catch(() => ({ data: null })),
     ]);
     const nextList = prices.data || [];
     if (silent && list.value.length) {
@@ -113,8 +122,10 @@ async function loadMarket({ silent = false } = {}) {
     list.value = nextList;
     hot.value = hots.data || [];
     announcement.value = ann.data;
+    bulletin.value = bull.data || null;
     pulse.value = pul.data;
     feeds.value = feed.data || [];
+    indices.value = idx.data || [];
     lastSyncedAt.value = Date.now();
     err.value = '';
   } catch (e) {
@@ -193,6 +204,25 @@ function scrollToMarket() {
       </div>
     </div>
 
+    <!-- FRD 日价格公告（价格发现正式结算价） -->
+    <div
+      v-if="bulletin?.status === 'published'"
+      class="border-b border-amber-500/30 bg-amber-500/5 px-4 py-2 text-sm text-slate-300"
+    >
+      <div class="mx-auto max-w-6xl">
+        <span class="font-medium text-amber-400">日价格公告 {{ bulletin.date }}</span>
+        <span class="ml-2 text-slate-500">正式结算价</span>
+        <span
+          v-for="line in (bulletin.payload?.lines || bulletin.snapshot?.lines || []).slice(0, 4)"
+          :key="line.code"
+          class="ml-3 font-mono text-xs text-slate-400"
+        >
+          {{ line.code }}={{ line.settle_price }}
+        </span>
+        <router-link to="/console" class="ml-3 text-xs text-amber-400/90 underline">控制台全文</router-link>
+      </div>
+    </div>
+
     <!-- 交易台顶栏：品牌压缩为一行，行情板才是首屏主体 -->
     <section class="border-b border-slate-700 bg-slate-950">
       <div class="mx-auto max-w-6xl px-4 py-3">
@@ -204,7 +234,7 @@ function scrollToMarket() {
               LIVE
             </span>
             <span class="font-mono text-xs text-slate-500">{{ clockText }}</span>
-            <span class="hidden text-xs text-slate-500 sm:inline">GPU / Token 现货 · Broker 撮合 · 2–6h 反馈</span>
+            <span class="hidden text-xs text-slate-500 sm:inline">GPU / Token 现货参考价 · 结算指数见下方 / 导航「指数」</span>
           </div>
           <div class="flex shrink-0 items-center gap-2">
             <button type="button" class="btn-secondary !py-1.5 !text-xs" @click="scrollToMarket">全表</button>
@@ -266,6 +296,45 @@ function scrollToMarket() {
         </div>
       </div>
 
+      <!-- 结算指数速览：与现货热门板区分 -->
+      <div
+        v-if="!loading && publishedIndices.length"
+        class="border-t border-slate-800 bg-slate-950"
+      >
+        <div class="mx-auto max-w-6xl px-4 py-3">
+          <div class="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <span class="font-mono uppercase tracking-wider text-slate-500">
+              结算指数 S
+              <span class="ml-2 hidden font-sans normal-case tracking-normal text-slate-600 sm:inline">
+                远期盯市 / 到期结算用 · 非现货报价
+              </span>
+            </span>
+            <router-link
+              to="/indices"
+              class="tap-target inline-flex items-center font-mono text-amber-500/90 hover:text-amber-400"
+            >
+              全部指数 →
+            </router-link>
+          </div>
+          <div class="flex gap-2 overflow-x-auto pb-1" style="-webkit-overflow-scrolling: touch">
+            <router-link
+              v-for="ix in publishedIndices"
+              :key="ix.id"
+              to="/indices"
+              class="tap-target shrink-0 rounded border border-slate-700 bg-slate-900/90 px-3 py-2 hover:border-amber-500/40"
+            >
+              <p class="font-mono text-xs font-semibold text-slate-200">{{ ix.code }}</p>
+              <p class="mono-num mt-1 text-lg font-semibold text-amber-500">
+                {{ fmt(ix.latest_published.settle_price) }}
+              </p>
+              <p class="mt-0.5 font-mono text-[10px] text-slate-500">
+                {{ ix.latest_published.date }} · {{ ix.sku?.name || ix.name }}
+              </p>
+            </router-link>
+          </div>
+        </div>
+      </div>
+
       <!-- 脉搏 + 成交 ticker：贴行情板，不占整屏 -->
       <div v-if="!loading" class="border-t border-slate-800 bg-slate-950">
         <div
@@ -298,7 +367,7 @@ function scrollToMarket() {
               <h2 class="text-sm font-medium uppercase tracking-wider text-slate-400">完整行情</h2>
               <p class="mt-1 text-xs text-slate-500">低 / 中 / 高为参考区间，不构成要约。</p>
             </div>
-            <div class="flex border border-slate-700">
+            <div class="flex w-full border border-slate-700 sm:w-auto">
               <button
                 v-for="f in [
                   { id: 'all', label: '全部' },
@@ -307,7 +376,7 @@ function scrollToMarket() {
                 ]"
                 :key="f.id"
                 type="button"
-                class="border-r border-slate-700 px-3 py-1.5 text-xs last:border-r-0"
+                class="tap-target flex-1 border-r border-slate-700 px-3 py-2 text-xs last:border-r-0 sm:flex-none sm:py-1.5"
                 :class="filter === f.id ? 'bg-amber-500 text-slate-950' : 'bg-slate-900 text-slate-400'"
                 @click="filter = f.id"
               >
@@ -315,7 +384,53 @@ function scrollToMarket() {
               </button>
             </div>
           </div>
-          <div class="panel mt-3 overflow-x-auto">
+
+          <!-- 移动端：卡片列表（触控友好） -->
+          <div class="mt-3 space-y-2 md:hidden">
+            <article
+              v-for="row in filtered"
+              :key="row.sku_id"
+              class="market-card"
+              :class="flashIds.has(row.sku_id) ? 'row-flash' : ''"
+            >
+              <div class="flex items-start justify-between gap-2">
+                <div class="min-w-0">
+                  <router-link
+                    :to="`/sku/${row.sku_id}`"
+                    class="block truncate font-mono text-sm font-semibold text-slate-100"
+                  >
+                    {{ row.name }}
+                  </router-link>
+                  <p class="mt-0.5 truncate text-xs text-slate-500">{{ row.spec }} · {{ row.unit }}</p>
+                </div>
+                <span :class="['shrink-0 font-mono text-xs', changeClass(row.change_pct)]">
+                  {{ row.change_label }}
+                </span>
+              </div>
+              <div class="mt-3 flex items-end justify-between gap-3">
+                <div>
+                  <p class="mono-num text-xl font-semibold text-amber-500">{{ fmt(row.price_mid) }}</p>
+                  <p class="mt-0.5 font-mono text-[10px] text-slate-500">
+                    {{ fmt(row.price_low) }}–{{ fmt(row.price_high) }}
+                    <span v-if="row.deal_low != null" class="ml-1 text-slate-600">
+                      · 成交 {{ fmt(row.deal_low) }}–{{ fmt(row.deal_high) }}
+                    </span>
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  class="btn-primary !min-h-[40px] !px-3 !py-2 !text-xs"
+                  @click="goRfq(row.sku_id, 'table')"
+                >
+                  询价
+                </button>
+              </div>
+            </article>
+            <p v-if="!filtered.length" class="py-8 text-center text-sm text-slate-500">暂无行情</p>
+          </div>
+
+          <!-- 桌面：表格 -->
+          <div class="panel mt-3 hidden overflow-x-auto md:block">
             <table class="data-table">
               <thead>
                 <tr>

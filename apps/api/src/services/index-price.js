@@ -111,9 +111,14 @@ export async function getLatestPublished(indexId, onOrBefore = null) {
 export async function generatePrintFromMid(indexId, date = todayShanghai()) {
   const index = await getIndexOrThrow(indexId);
   const ref = await ReferencePrice.findOne({
-    where: { sku_id: index.sku_id, date },
+    where: { sku_id: index.sku_id, date, region: index.region || 'shanghai' },
   });
-  if (!ref) throw new AppError(`当日无参考价 mid（SKU#${index.sku_id} ${date}）`);
+  if (!ref) {
+    const skuName = index.sku?.name || `SKU#${index.sku_id}`;
+    throw new AppError(
+      `当日（${date}）锚定 SKU「${skuName}」区域 ${index.region || 'shanghai'} 尚无参考价，请先到「参考价管理」录入低/中/高`,
+    );
+  }
 
   const settlePrice = Number(ref.price_mid);
   const prev = await getLatestPublished(indexId, date);
@@ -193,6 +198,14 @@ export async function publishPrint(indexId, date) {
   await assertPrintEditable(print);
   if (!['draft', 'pending_review'].includes(print.status) && print.status !== 'published') {
     throw new AppError('当前状态不可发布');
+  }
+  // 引擎/参考价产出：须走公告双人复核，禁止指数台单笔绕过
+  if (['engine', 'reference'].includes(print.source)) {
+    const { PriceBulletin } = await import('../models/frd-models.js');
+    const bulletin = await PriceBulletin.findOne({ where: { date, status: 'published' } });
+    if (!bulletin) {
+      throw new AppError('引擎/参考测算价须经当日价格公告双人复核后发布（价格发现）');
+    }
   }
   print.status = 'published';
   await print.save();

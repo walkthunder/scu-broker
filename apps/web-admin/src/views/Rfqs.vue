@@ -11,7 +11,7 @@ const drawer = ref(false);
 const current = ref(null);
 const quoteForm = reactive({
   supplier_id: null,
-  price: 0,
+  price: null,
   delivery_date: '',
   note: '',
 });
@@ -33,8 +33,9 @@ function open(row) {
   current.value = row;
   assignId.value = row.broker_id;
   quoteForm.supplier_id = row.quote?.supplier_id || suppliers.value[0]?.id;
-  quoteForm.price = row.quote ? Number(row.quote.price) : 0;
-  quoteForm.delivery_date = row.quote?.delivery_date || '';
+  quoteForm.price = row.quote ? Number(row.quote.price) : null;
+  quoteForm.delivery_date =
+    row.quote?.delivery_date || row.delivery_date || '';
   quoteForm.note = row.quote?.note || '';
   drawer.value = true;
 }
@@ -54,9 +55,12 @@ async function assign() {
 }
 
 async function saveQuote() {
+  if (!quoteForm.supplier_id) throw new Error('请选择供应商');
+  if (!(Number(quoteForm.price) > 0)) throw new Error('成交价须大于 0');
+  if (!quoteForm.delivery_date) throw new Error('请选择交付日期');
   const res = await api('/admin/quotes', {
     method: 'POST',
-    body: { rfq_id: current.value.id, ...quoteForm },
+    body: { rfq_id: current.value.id, ...quoteForm, price: Number(quoteForm.price) },
   });
   current.value = { ...current.value, quote: res.data };
   await load();
@@ -119,11 +123,19 @@ const tags = [
   { label: '已确认', value: 'confirmed' },
   { label: '已拒绝', value: 'rejected' },
 ];
+const statusLabel = {
+  pending: '待处理',
+  quoted: '已报价',
+  confirmed: '已确认',
+  rejected: '已拒绝',
+  cancelled: '已取消',
+};
 </script>
 
 <template>
   <div>
     <h2>询价管理</h2>
+    <p class="page-desc">点行打开详情；报价须填成交价与交付日，默认带出客户期望交付日。</p>
     <div style="margin: 12px 0; display: flex; gap: 8px">
       <el-tag
         v-for="t in tags"
@@ -142,7 +154,9 @@ const tags = [
       <el-table-column prop="quantity" label="数量" width="90" />
       <el-table-column prop="created_at" label="提交时间" />
       <el-table-column label="Broker" :formatter="(row) => row.broker?.name || '-'" />
-      <el-table-column prop="status" label="状态" width="100" />
+      <el-table-column label="状态" width="100">
+        <template #default="{ row }">{{ statusLabel[row.status] || row.status }}</template>
+      </el-table-column>
     </el-table>
 
     <el-drawer v-model="drawer" title="询价详情" size="480px">
@@ -163,19 +177,30 @@ const tags = [
         </div>
         <el-divider>录入报价</el-divider>
         <el-form label-width="90px">
-          <el-form-item label="供应商">
+          <el-form-item label="供应商" required>
             <el-select v-model="quoteForm.supplier_id" style="width: 100%">
               <el-option v-for="s in suppliers" :key="s.id" :label="s.name" :value="s.id" />
             </el-select>
           </el-form-item>
-          <el-form-item label="成交价">
-            <el-input-number v-model="quoteForm.price" :min="0" :precision="2" style="width: 100%" />
+          <el-form-item label="成交价" required>
+            <el-input-number
+              v-model="quoteForm.price"
+              :min="0.01"
+              :precision="2"
+              style="width: 100%"
+              placeholder="须大于 0"
+            />
           </el-form-item>
-          <el-form-item label="交付日期">
-            <el-date-picker v-model="quoteForm.delivery_date" type="date" value-format="YYYY-MM-DD" style="width: 100%" />
+          <el-form-item label="交付日期" required>
+            <el-date-picker
+              v-model="quoteForm.delivery_date"
+              type="date"
+              value-format="YYYY-MM-DD"
+              style="width: 100%"
+            />
           </el-form-item>
           <el-form-item label="备注">
-            <el-input v-model="quoteForm.note" type="textarea" />
+            <el-input v-model="quoteForm.note" type="textarea" placeholder="可选" />
           </el-form-item>
         </el-form>
         <div style="display: flex; gap: 8px; flex-wrap: wrap">
