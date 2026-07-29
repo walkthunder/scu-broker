@@ -6,7 +6,11 @@ import { api } from '../api';
 const list = ref([]);
 
 async function load() {
-  list.value = (await api('/admin/settlement-bills')).data || [];
+  try {
+    list.value = (await api('/admin/settlement-bills')).data || [];
+  } catch (e) {
+    ElMessage.error(e.message || '加载失败');
+  }
 }
 
 onMounted(load);

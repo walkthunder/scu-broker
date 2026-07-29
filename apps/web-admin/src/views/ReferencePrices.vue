@@ -61,7 +61,7 @@ async function save() {
       </div>
     </div>
     <el-table :data="list" style="margin-top: 12px">
-      <el-table-column label="SKU" :formatter="(_, __, row) => row.sku?.name" />
+      <el-table-column label="SKU" :formatter="(row) => row.sku?.name" />
       <el-table-column prop="date" label="日期" width="120" />
       <el-table-column prop="price_low" label="低" />
       <el-table-column prop="price_mid" label="中" />

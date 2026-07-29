@@ -12,13 +12,27 @@ describe('V4 价格指数', ({ it }) => {
     assert(Array.isArray(list.json.data) && list.json.data.length >= 1, '至少 1 个指数');
     const idx = list.json.data.find((x) => x.code === 'H100-M') || list.json.data[0];
 
-    const date = addDaysShanghai(todayShanghai(), -5);
-    const gen = await req(`/admin/indices/${idx.id}/prints`, {
-      method: 'POST',
-      headers: auth(token),
-      body: { date, settle_price: 80000 },
-    });
+    // 找未锁定日期；若已发布则先撤销再覆写
+    let date = null;
+    let gen = null;
+    for (let i = 5; i < 25; i++) {
+      const d = addDaysShanghai(todayShanghai(), -i);
+      await req(`/admin/indices/${idx.id}/prints/${d}/unpublish`, {
+        method: 'POST',
+        headers: auth(token),
+      }).catch(() => null);
+      gen = await req(`/admin/indices/${idx.id}/prints`, {
+        method: 'POST',
+        headers: auth(token),
+        body: { date: d, settle_price: 80000 },
+      });
+      if (gen.json?.code === 0) {
+        date = d;
+        break;
+      }
+    }
     assertOk(gen);
+    assert(date, '应找到可写入日期');
     assert(['draft', 'pending_review', 'published'].includes(gen.json.data.status));
 
     const pub = await req(`/admin/indices/${idx.id}/prints/${date}/publish`, {
@@ -45,14 +59,21 @@ describe('V4 价格指数', ({ it }) => {
     const list = await req('/admin/indices', { headers: auth(token) });
     assertOk(list);
     const idx = list.json.data.find((x) => x.code === 'H100-M') || list.json.data[0];
-    const date = addDaysShanghai(todayShanghai(), -4);
-    const r = await req(`/admin/indices/${idx.id}/prints`, {
-      method: 'POST',
-      headers: auth(token),
-      body: { date, settle_price: 1 },
-    });
+    let r = null;
+    for (let i = 4; i < 30; i++) {
+      const date = addDaysShanghai(todayShanghai(), -i);
+      await req(`/admin/indices/${idx.id}/prints/${date}/unpublish`, {
+        method: 'POST',
+        headers: auth(token),
+      }).catch(() => null);
+      r = await req(`/admin/indices/${idx.id}/prints`, {
+        method: 'POST',
+        headers: auth(token),
+        body: { date, settle_price: 1 },
+      });
+      if (r.json?.code === 0) break;
+    }
     assertOk(r);
-    // 相对已有 published 极大跳变 → pending_review（若尚无 published 则 draft）
     assert(['draft', 'pending_review'].includes(r.json.data.status));
   });
 });

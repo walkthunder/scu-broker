@@ -63,8 +63,8 @@ async function uploadFile(ev) {
     <h2>订单管理</h2>
     <el-table :data="list" style="margin-top: 12px" @row-click="open">
       <el-table-column prop="id" label="订单号" width="90" />
-      <el-table-column label="客户" :formatter="(_, __, row) => row.customer?.company_name || row.customer?.name" />
-      <el-table-column label="供应商" :formatter="(_, __, row) => row.supplier?.name" />
+      <el-table-column label="客户" :formatter="(row) => row.customer?.company_name || row.customer?.name" />
+      <el-table-column label="供应商" :formatter="(row) => row.supplier?.name" />
       <el-table-column prop="price" label="成交价" />
       <el-table-column prop="status" label="状态" width="100" />
       <el-table-column label="操作" width="120">

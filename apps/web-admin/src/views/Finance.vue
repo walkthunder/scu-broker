@@ -44,7 +44,7 @@ async function save() {
     <h2>财务管理</h2>
     <el-table :data="list" style="margin-top: 12px">
       <el-table-column prop="order_id" label="订单号" width="90" />
-      <el-table-column label="客户" :formatter="(_, __, row) => row.customer?.company_name || row.customer?.name" />
+      <el-table-column label="客户" :formatter="(row) => row.customer?.company_name || row.customer?.name" />
       <el-table-column prop="receivable" label="应收客户" />
       <el-table-column prop="payable" label="应付供应商" />
       <el-table-column prop="received" label="实收" />

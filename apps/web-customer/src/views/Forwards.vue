@@ -33,6 +33,7 @@ async function load() {
     channels.value = ch.data || [];
   } catch (e) {
     err.value = e.message;
+    list.value = [];
   } finally {
     loading.value = false;
   }
@@ -83,8 +84,13 @@ function openDelivery(row) {
 }
 
 async function submitDelivery() {
-  if (!deliveryTarget.value || !channelId.value) return;
+  if (!deliveryTarget.value) return;
+  if (!channelId.value) {
+    err.value = channels.value.length ? '请选择交割通道' : '暂无可用交割通道，请联系运营';
+    return;
+  }
   msg.value = '';
+  err.value = '';
   try {
     await api(`/customer/forwards/${deliveryTarget.value.id}/delivery-request`, {
       method: 'POST',
@@ -133,6 +139,7 @@ onMounted(load);
 
     <div class="panel mt-4 overflow-hidden">
       <p v-if="loading" class="p-4 text-sm text-slate-500">加载中…</p>
+      <p v-else-if="err && !list.length" class="p-4 text-sm text-rose-400">{{ err }}</p>
       <table v-else class="data-table">
         <thead>
           <tr>
@@ -151,7 +158,7 @@ onMounted(load);
           <tr v-for="row in shown" :key="row.id">
             <td class="font-mono">#{{ row.id }}</td>
             <td>{{ row.index?.code }}</td>
-            <td>{{ mySide(row) === 'buyer' ? '买方(多)' : '卖方(空)' }}</td>
+            <td>{{ mySide(row) === 'buyer' ? '买方(多)' : mySide(row) === 'seller' ? '卖方(空)' : '—' }}</td>
             <td>{{ row.strike_price }}</td>
             <td>{{ row.qty }} {{ row.unit }}</td>
             <td>{{ row.expiry_date }}</td>

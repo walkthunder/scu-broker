@@ -137,11 +137,11 @@ const tags = [
     </div>
     <el-table :data="list" @row-click="open" style="cursor: pointer">
       <el-table-column prop="id" label="询价号" width="90" />
-      <el-table-column label="客户公司" :formatter="(_, __, row) => row.customer?.company_name || '-'" />
-      <el-table-column label="SKU" :formatter="(_, __, row) => row.sku?.name" />
+      <el-table-column label="客户公司" :formatter="(row) => row.customer?.company_name || '-'" />
+      <el-table-column label="SKU" :formatter="(row) => row.sku?.name" />
       <el-table-column prop="quantity" label="数量" width="90" />
       <el-table-column prop="created_at" label="提交时间" />
-      <el-table-column label="Broker" :formatter="(_, __, row) => row.broker?.name || '-'" />
+      <el-table-column label="Broker" :formatter="(row) => row.broker?.name || '-'" />
       <el-table-column prop="status" label="状态" width="100" />
     </el-table>
 

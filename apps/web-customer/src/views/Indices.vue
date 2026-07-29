@@ -21,10 +21,13 @@ async function load() {
 
 async function open(row) {
   selected.value = row;
+  prints.value = [];
+  err.value = '';
   try {
     prints.value = (await api(`/customer/indices/${row.id}/prints`)).data || [];
   } catch (e) {
     err.value = e.message;
+    prints.value = [];
   }
 }
 

@@ -25,14 +25,18 @@ const userLabel = (u) =>
   u ? `${u.company_name || u.name || '用户'} (#${u.id} ${u.phone})` : '';
 
 async function load() {
-  const [f, i, c] = await Promise.all([
-    api('/admin/forwards'),
-    api('/admin/indices'),
-    api('/admin/customers'),
-  ]);
-  list.value = f.data || [];
-  indices.value = i.data || [];
-  customers.value = c.data || [];
+  try {
+    const [f, i, c] = await Promise.all([
+      api('/admin/forwards'),
+      api('/admin/indices'),
+      api('/admin/customers'),
+    ]);
+    list.value = f.data || [];
+    indices.value = i.data || [];
+    customers.value = c.data || [];
+  } catch (e) {
+    ElMessage.error(e.message || '加载失败');
+  }
 }
 
 onMounted(load);
@@ -70,6 +74,10 @@ function openProxy(row) {
 }
 
 async function doProxy() {
+  if (!proxyForm.note?.trim()) {
+    ElMessage.warning('请填写代理确认备注');
+    return;
+  }
   try {
     await api(`/admin/forwards/${proxyTarget.value.id}/proxy-confirm`, {
       method: 'POST',
@@ -90,14 +98,20 @@ async function cancelRow(row) {
     ElMessage.success('已作废');
     await load();
   } catch (e) {
-    if (e !== 'cancel') ElMessage.error(e.message || '已取消');
+    if (e === 'cancel' || e === 'close') return;
+    ElMessage.error(e.message || '操作失败');
   }
 }
 
 async function settleBatch() {
   try {
     const r = await api('/admin/forwards/settle-batch', { method: 'POST', body: {} });
-    ElMessage.success(`批结算完成 ${r.data?.length || 0} 笔`);
+    const rows = r.data || [];
+    const okN = rows.filter((x) => x.ok).length;
+    const failN = rows.length - okN;
+    ElMessage.success(
+      failN ? `批结算成功 ${okN} 笔，跳过/失败 ${failN} 笔` : `批结算成功 ${okN} 笔`,
+    );
     await load();
   } catch (e) {
     ElMessage.error(e.message);
@@ -136,9 +150,9 @@ const statusLabel = computed(() => ({
     </div>
     <el-table :data="list" style="margin-top: 12px">
       <el-table-column prop="id" label="ID" width="70" />
-      <el-table-column label="指数" :formatter="(_, __, r) => r.index?.code" width="100" />
-      <el-table-column label="买方" :formatter="(_, __, r) => userLabel(r.buyer)" min-width="140" />
-      <el-table-column label="卖方" :formatter="(_, __, r) => userLabel(r.seller)" min-width="140" />
+      <el-table-column label="指数" :formatter="(r) => r.index?.code" width="100" />
+      <el-table-column label="买方" :formatter="(r) => userLabel(r.buyer)" min-width="140" />
+      <el-table-column label="卖方" :formatter="(r) => userLabel(r.seller)" min-width="140" />
       <el-table-column prop="strike_price" label="X" width="90" />
       <el-table-column prop="qty" label="数量" width="80" />
       <el-table-column prop="expiry_date" label="到期日" width="120" />

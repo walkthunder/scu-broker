@@ -7,6 +7,7 @@ import {
 } from '../models/index.js';
 import { AppError } from '../utils/errors.js';
 import { todayShanghai } from '../utils/market.js';
+import { sequelize } from '../config/database.js';
 import { getLatestPublished } from './index-price.js';
 import {
   notifyForwardPendingConfirm,
@@ -84,10 +85,12 @@ export async function createForward(body, brokerId) {
     note,
     confirm_hours,
   } = body;
-  if (!index_id || !buyer_id || !seller_id || !qty || !strike_price || !expiry_date) {
+  if (!index_id || !buyer_id || !seller_id || qty == null || !strike_price || !expiry_date) {
     throw new AppError('index_id、buyer_id、seller_id、qty、strike_price、expiry_date 必填');
   }
   if (Number(buyer_id) === Number(seller_id)) throw new AppError('买方与卖方不能为同一人');
+  if (!(Number(qty) > 0)) throw new AppError('数量须大于 0');
+  if (!(Number(strike_price) > 0)) throw new AppError('锁价 X 须大于 0');
   const index = await PriceIndex.findByPk(index_id);
   if (!index || index.status !== 'active') throw new AppError('指数不存在或未启用');
   const [buyer, seller] = await Promise.all([
@@ -95,6 +98,11 @@ export async function createForward(body, brokerId) {
     User.findByPk(seller_id),
   ]);
   if (!buyer || !seller) throw new AppError('买方或卖方用户不存在');
+
+  // 开仓一律现金；实物须后续窗口内申请
+  if (settle_mode === 'physical') {
+    throw new AppError('开仓默认现金结算，请到期前在窗口内申请实物交割');
+  }
 
   const hours = Number(confirm_hours) > 0 ? Number(confirm_hours) : CONFIRM_HOURS;
   const deadline = new Date(Date.now() + hours * 3600 * 1000);
@@ -107,7 +115,7 @@ export async function createForward(body, brokerId) {
     unit: unit || '月',
     strike_price: Number(strike_price),
     expiry_date,
-    settle_mode: settle_mode === 'physical' ? 'physical' : 'cash',
+    settle_mode: 'cash',
     status: 'pending_confirm',
     broker_id: brokerId || null,
     confirm_deadline_at: deadline,
@@ -135,15 +143,18 @@ export async function confirmForward(contractId, userId) {
   if (!contract) throw new AppError('合约不存在', 404);
   if (contract.status !== 'pending_confirm') throw new AppError('当前状态不可确认');
   if (contract.confirm_deadline_at && new Date(contract.confirm_deadline_at) < new Date()) {
-    throw new AppError('已超过确认截止时间');
+    contract.status = 'cancelled';
+    contract.cancel_reason = '确认超时自动取消';
+    await contract.save();
+    throw new AppError('已超过确认截止时间，合约已取消');
   }
 
   const uid = Number(userId);
-  if (uid === contract.buyer_id) {
+  if (uid === Number(contract.buyer_id)) {
     if (contract.buyer_confirmed_at) throw new AppError('买方已确认');
     contract.buyer_confirmed_at = new Date();
     contract.buyer_confirm_by = uid;
-  } else if (uid === contract.seller_id) {
+  } else if (uid === Number(contract.seller_id)) {
     if (contract.seller_confirmed_at) throw new AppError('卖方已确认');
     contract.seller_confirmed_at = new Date();
     contract.seller_confirm_by = uid;
@@ -265,22 +276,50 @@ export async function settleBatch({ asOf = todayShanghai() } = {}) {
       qty: c.qty,
     });
 
-    const bill = await SettlementBill.create({
-      contract_id: c.id,
-      settle_date: asOf,
-      settle_price: print.settle_price,
-      settle_price_date: print.date,
-      strike: c.strike_price,
-      qty: c.qty,
-      amount,
-      pay_direction,
-      pay_status: 'pending',
-    });
-    c.status = 'settled';
-    await c.save();
-    const full = await ForwardContract.findByPk(c.id, { include: contractInclude });
-    await notifyForwardBill(full, bill);
-    results.push({ contract_id: c.id, ok: true, bill_id: bill.id, amount, pay_direction });
+    try {
+      const bill = await sequelize.transaction(async (t) => {
+        const locked = await ForwardContract.findByPk(c.id, {
+          transaction: t,
+          lock: t.LOCK.UPDATE,
+        });
+        if (!locked || locked.status !== 'open' || locked.settle_mode !== 'cash') {
+          throw new AppError('合约状态已变更');
+        }
+        const dup = await SettlementBill.findOne({
+          where: { contract_id: c.id },
+          transaction: t,
+          lock: t.LOCK.UPDATE,
+        });
+        if (dup) throw new AppError('已有账单');
+
+        const created = await SettlementBill.create(
+          {
+            contract_id: c.id,
+            settle_date: asOf,
+            settle_price: print.settle_price,
+            settle_price_date: print.date,
+            strike: c.strike_price,
+            qty: c.qty,
+            amount,
+            pay_direction,
+            pay_status: 'pending',
+          },
+          { transaction: t },
+        );
+        locked.status = 'settled';
+        await locked.save({ transaction: t });
+        return created;
+      });
+      const full = await ForwardContract.findByPk(c.id, { include: contractInclude });
+      await notifyForwardBill(full, bill);
+      results.push({ contract_id: c.id, ok: true, bill_id: bill.id, amount, pay_direction });
+    } catch (e) {
+      results.push({
+        contract_id: c.id,
+        ok: false,
+        reason: e.message || '结算失败',
+      });
+    }
   }
   return results;
 }

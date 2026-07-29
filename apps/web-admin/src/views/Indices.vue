@@ -12,19 +12,32 @@ const form = reactive({ code: '', name: '', sku_id: null, jump_threshold_pct: 20
 const printForm = reactive({ date: '', settle_price: null });
 
 async function loadIndices() {
-  indices.value = (await api('/admin/indices')).data || [];
-  if (!selected.value && indices.value.length) {
-    await selectIndex(indices.value[0]);
+  try {
+    indices.value = (await api('/admin/indices')).data || [];
+    if (!selected.value && indices.value.length) {
+      await selectIndex(indices.value[0]);
+    }
+  } catch (e) {
+    ElMessage.error(e.message || '加载指数失败');
   }
 }
 
 async function loadSkus() {
-  skus.value = (await api('/admin/skus')).data || [];
+  try {
+    skus.value = (await api('/admin/skus')).data || [];
+  } catch (e) {
+    ElMessage.error(e.message || '加载 SKU 失败');
+  }
 }
 
 async function selectIndex(row) {
   selected.value = row;
-  prints.value = (await api(`/admin/indices/${row.id}/prints`)).data || [];
+  try {
+    prints.value = (await api(`/admin/indices/${row.id}/prints`)).data || [];
+  } catch (e) {
+    prints.value = [];
+    ElMessage.error(e.message || '加载结算价失败');
+  }
 }
 
 onMounted(async () => {
@@ -58,7 +71,11 @@ async function generateFromMid() {
 }
 
 async function overridePrice() {
-  if (!selected.value || printForm.settle_price == null) return;
+  if (!selected.value) return;
+  if (printForm.settle_price == null) {
+    ElMessage.warning('请填写覆写价');
+    return;
+  }
   try {
     await api(`/admin/indices/${selected.value.id}/prints`, {
       method: 'POST',
@@ -107,7 +124,7 @@ async function unpublish(row) {
         >
           <el-table-column prop="code" label="代码" width="100" />
           <el-table-column prop="name" label="名称" />
-          <el-table-column label="SKU" :formatter="(_, __, r) => r.sku?.name" />
+          <el-table-column label="SKU" :formatter="(r) => r.sku?.name" />
         </el-table>
       </el-col>
       <el-col :span="16">

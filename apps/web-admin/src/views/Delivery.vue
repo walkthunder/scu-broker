@@ -17,20 +17,24 @@ const wlForm = reactive({ user_id: null, active: true, note: '' });
 const wlVisible = ref(false);
 
 async function load() {
-  const [c, w, o, u, s, sk] = await Promise.all([
-    api('/admin/delivery-channels'),
-    api('/admin/delivery-whitelists'),
-    api('/admin/delivery-orders'),
-    api('/admin/customers'),
-    api('/admin/suppliers'),
-    api('/admin/skus'),
-  ]);
-  channels.value = c.data || [];
-  whitelists.value = w.data || [];
-  orders.value = o.data || [];
-  customers.value = u.data || [];
-  suppliers.value = s.data || [];
-  skus.value = sk.data || [];
+  try {
+    const [c, w, o, u, s, sk] = await Promise.all([
+      api('/admin/delivery-channels'),
+      api('/admin/delivery-whitelists'),
+      api('/admin/delivery-orders'),
+      api('/admin/customers'),
+      api('/admin/suppliers'),
+      api('/admin/skus'),
+    ]);
+    channels.value = c.data || [];
+    whitelists.value = w.data || [];
+    orders.value = o.data || [];
+    customers.value = u.data || [];
+    suppliers.value = s.data || [];
+    skus.value = sk.data || [];
+  } catch (e) {
+    ElMessage.error(e.message || '加载失败');
+  }
 }
 
 onMounted(load);
@@ -121,8 +125,8 @@ const userLabel = (u) =>
       <el-table :data="orders" style="margin-top: 12px">
         <el-table-column prop="id" label="工单" width="70" />
         <el-table-column prop="contract_id" label="合约" width="80" />
-        <el-table-column label="通道" :formatter="(_, __, r) => r.channel?.name" />
-        <el-table-column label="申请人" :formatter="(_, __, r) => userLabel(r.requester)" />
+        <el-table-column label="通道" :formatter="(r) => r.channel?.name" />
+        <el-table-column label="申请人" :formatter="(r) => userLabel(r.requester)" />
         <el-table-column prop="status" label="状态" width="100" />
         <el-table-column label="操作" width="220">
           <template #default="{ row }">
@@ -146,8 +150,8 @@ const userLabel = (u) =>
       <el-table :data="channels" style="margin-top: 12px">
         <el-table-column prop="id" label="ID" width="70" />
         <el-table-column prop="name" label="名称" />
-        <el-table-column label="供应商" :formatter="(_, __, r) => r.supplier?.display_name || r.supplier?.name" />
-        <el-table-column label="SKU" :formatter="(_, __, r) => r.sku?.name" />
+        <el-table-column label="供应商" :formatter="(r) => r.supplier?.display_name || r.supplier?.name" />
+        <el-table-column label="SKU" :formatter="(r) => r.sku?.name" />
         <el-table-column label="启用" width="80">
           <template #default="{ row }">{{ row.active ? '是' : '否' }}</template>
         </el-table-column>
@@ -163,7 +167,7 @@ const userLabel = (u) =>
       <el-button type="primary" style="margin-top: 12px" @click="wlVisible = true">开通白名单</el-button>
       <el-table :data="whitelists" style="margin-top: 12px">
         <el-table-column prop="id" label="ID" width="70" />
-        <el-table-column label="账户" :formatter="(_, __, r) => userLabel(r.user)" />
+        <el-table-column label="账户" :formatter="(r) => userLabel(r.user)" />
         <el-table-column label="启用" width="80">
           <template #default="{ row }">{{ row.active ? '是' : '否' }}</template>
         </el-table-column>

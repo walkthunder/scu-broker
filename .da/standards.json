@@ -1,17 +1,14 @@
 {
   "version": 1,
-  "mode": "strict",
-  "project": {
-    "name": "scu-broker",
-    "stack": "generic"
-  },
-  "commit": {
-    "require_task": true,
-    "lifecycle": true
+  "atomic": {
+    "max_top_level_dirs": 12
   },
   "guard": {
-    "env_strict": true,
-    "agent_window_hours": 2,
-    "require_ai_attribution": true
+    "secret_patterns": [
+      "(?<![A-Za-z0-9+/_=])AKIA[0-9A-Z]{16}(?![A-Za-z0-9+/_=])",
+      "(?<![A-Za-z0-9])sk-[a-zA-Z0-9]{20,}",
+      "api[_-]?key\\s*[:=]\\s*['\"][^'\"]{8,}",
+      "-----BEGIN (RSA |EC )?PRIVATE KEY-----"
+    ]
   }
 }

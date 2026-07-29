@@ -127,7 +127,12 @@ export async function upsertManualPrint(indexId, date, settlePrice, { forceStatu
   if (settlePrice == null || Number(settlePrice) <= 0) throw new AppError('settle_price 无效');
   const index = await getIndexOrThrow(indexId);
   let print = await IndexPrint.findOne({ where: { index_id: indexId, date } });
-  if (print) await assertPrintEditable(print);
+  if (print) {
+    await assertPrintEditable(print);
+    if (print.status === 'published') {
+      throw new AppError('已发布的结算价请先撤销发布再覆写');
+    }
+  }
 
   const prev = await getLatestPublished(indexId, date);
   let status = forceStatus || 'draft';

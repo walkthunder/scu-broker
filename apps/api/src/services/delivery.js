@@ -125,7 +125,7 @@ export async function requestDelivery(contractId, userId, { channel_id, note } =
   if (contract.settle_mode === 'physical') throw new AppError('合约已转入实物交割意向');
 
   const uid = Number(userId);
-  if (uid !== contract.buyer_id && uid !== contract.seller_id) {
+  if (uid !== Number(contract.buyer_id) && uid !== Number(contract.seller_id)) {
     throw new AppError('仅合约买方或卖方可申请', 403);
   }
   if (!(await isUserWhitelisted(uid))) {
@@ -174,22 +174,30 @@ export async function approveDelivery(orderId, operatorId, { create_spot_order =
   if (!row) throw new AppError('交割工单不存在', 404);
   if (row.status !== 'pending') throw new AppError('仅待审核工单可批准');
 
-  const contract = await ForwardContract.findByPk(row.contract_id);
-  if (!contract || contract.status !== 'open') throw new AppError('合约状态不可交割');
+  const { sequelize } = await import('../config/database.js');
+  await sequelize.transaction(async (t) => {
+    const order = await DeliveryOrder.findByPk(orderId, {
+      transaction: t,
+      lock: t.LOCK.UPDATE,
+    });
+    if (!order || order.status !== 'pending') throw new AppError('工单状态已变更');
+    const contract = await ForwardContract.findByPk(order.contract_id, {
+      transaction: t,
+      lock: t.LOCK.UPDATE,
+    });
+    if (!contract || contract.status !== 'open') throw new AppError('合约状态不可交割');
 
-  row.status = 'approved';
-  row.reviewed_by = operatorId;
-  row.reviewed_at = new Date();
-  await row.save();
+    order.status = 'approved';
+    order.reviewed_by = operatorId;
+    order.reviewed_at = new Date();
+    if (create_spot_order) {
+      order.note = `${order.note || ''}\n[approve] 已标记需线下建履约单`.trim();
+    }
+    await order.save({ transaction: t });
 
-  contract.settle_mode = 'physical';
-  await contract.save();
-
-  // 可选建现货履约单：本轮仅留关联位，不强行建复杂订单（无 quote）
-  if (create_spot_order) {
-    row.note = `${row.note || ''}\n[approve] 已标记需线下建履约单`.trim();
-    await row.save();
-  }
+    contract.settle_mode = 'physical';
+    await contract.save({ transaction: t });
+  });
 
   return DeliveryOrder.findByPk(orderId, { include: orderInclude });
 }
@@ -211,18 +219,28 @@ export async function completeDelivery(orderId, operatorId) {
   if (!row) throw new AppError('交割工单不存在', 404);
   if (row.status !== 'approved') throw new AppError('仅已批准工单可完成');
 
-  const contract = await ForwardContract.findByPk(row.contract_id);
-  if (!contract) throw new AppError('合约不存在', 404);
-  if (!['open'].includes(contract.status)) throw new AppError('合约状态不可完成交割');
+  const { sequelize } = await import('../config/database.js');
+  await sequelize.transaction(async (t) => {
+    const order = await DeliveryOrder.findByPk(orderId, {
+      transaction: t,
+      lock: t.LOCK.UPDATE,
+    });
+    if (!order || order.status !== 'approved') throw new AppError('工单状态已变更');
+    const contract = await ForwardContract.findByPk(order.contract_id, {
+      transaction: t,
+      lock: t.LOCK.UPDATE,
+    });
+    if (!contract || contract.status !== 'open') throw new AppError('合约状态不可完成交割');
 
-  row.status = 'done';
-  row.completed_at = new Date();
-  if (!row.reviewed_by) row.reviewed_by = operatorId;
-  await row.save();
+    order.status = 'done';
+    order.completed_at = new Date();
+    if (!order.reviewed_by) order.reviewed_by = operatorId;
+    await order.save({ transaction: t });
 
-  contract.status = 'delivered';
-  contract.settle_mode = 'physical';
-  await contract.save();
+    contract.status = 'delivered';
+    contract.settle_mode = 'physical';
+    await contract.save({ transaction: t });
+  });
 
   return DeliveryOrder.findByPk(orderId, { include: orderInclude });
 }
