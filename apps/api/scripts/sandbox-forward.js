@@ -32,6 +32,27 @@ async function customerLogin(phone) {
   });
 }
 
+async function ensurePublished(token, indexId, settlePrice, preferredDate) {
+  for (let i = 0; i < 20; i++) {
+    const date = addDaysShanghai(preferredDate, -i);
+    try {
+      await api(`/admin/indices/${indexId}/prints`, {
+        method: 'POST',
+        token,
+        body: { date, settle_price: settlePrice },
+      });
+      await api(`/admin/indices/${indexId}/prints/${date}/publish`, {
+        method: 'POST',
+        token,
+      });
+      return date;
+    } catch (e) {
+      if (!String(e.message).includes('已用于结算')) throw e;
+    }
+  }
+  throw new Error('无法找到可写入的结算价日期');
+}
+
 async function runStory({ label, X, S, qty, expiryOffset }) {
   console.log(`\n=== ${label} ===`);
   const admin = await api('/admin/login', {
@@ -42,16 +63,8 @@ async function runStory({ label, X, S, qty, expiryOffset }) {
   const seller = await customerLogin('13900001002');
   const indices = await api('/admin/indices', { token: admin.token });
   const idx = indices.find((x) => x.code === 'H100-M') || indices[0];
-  const expiry = addDaysShanghai(todayShanghai(), expiryOffset);
-  await api(`/admin/indices/${idx.id}/prints`, {
-    method: 'POST',
-    token: admin.token,
-    body: { date: expiry, settle_price: S },
-  });
-  await api(`/admin/indices/${idx.id}/prints/${expiry}/publish`, {
-    method: 'POST',
-    token: admin.token,
-  });
+  const preferred = addDaysShanghai(todayShanghai(), expiryOffset);
+  const expiry = await ensurePublished(admin.token, idx.id, S, preferred);
 
   const contract = await api('/admin/forwards', {
     method: 'POST',
@@ -79,7 +92,7 @@ async function runStory({ label, X, S, qty, expiryOffset }) {
     body: { asOf: todayShanghai() },
   });
   const hit = results.find((r) => r.contract_id === contract.id);
-  console.log({ X, S, qty, result: hit });
+  console.log({ X, S, qty, expiry, result: hit });
 }
 
 async function main() {
@@ -88,14 +101,14 @@ async function main() {
     X: 100,
     S: 150,
     qty: 2,
-    expiryOffset: 0,
+    expiryOffset: -60,
   });
   await runStory({
     label: '跌价 S=0.7X',
     X: 100,
     S: 70,
     qty: 1,
-    expiryOffset: -1,
+    expiryOffset: -80,
   });
   console.log('\nSandbox done.');
 }
