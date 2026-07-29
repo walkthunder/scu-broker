@@ -1,11 +1,15 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
+import { useRoute } from 'vue-router';
 import { api, currentUser } from '../api';
 
+const route = useRoute();
 const list = ref([]);
 const channels = ref([]);
 const whitelisted = ref(false);
-const tab = ref('pending');
+const tab = ref(
+  route.query.tab === 'open' || route.query.tab === 'done' ? route.query.tab : 'pending',
+);
 const loading = ref(true);
 const err = ref('');
 const msg = ref('');

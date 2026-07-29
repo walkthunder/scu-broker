@@ -48,7 +48,7 @@ async function runJobs(kind) {
 }
 
 function exportBulletin() {
-  const date = new Date().toISOString().slice(0, 10);
+  const date = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' });
   const base = import.meta.env.VITE_API_BASE || '/api';
   fetch(`${base}/frd/price-bulletins/${date}/export.html`, {
     headers: { Authorization: `Bearer ${getToken()}` },

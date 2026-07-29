@@ -164,6 +164,7 @@ router.post('/customer/login', async (req, res, next) => {
     if (!user || !user.password_hash || !(await bcrypt.compare(password, user.password_hash))) {
       throw new AppError('账号或密码错误', 401);
     }
+    if (user.blacklisted) throw new AppError('账户已列入黑名单', 403);
 
     const token = signToken(user);
     ok(res, { token, user: publicUser(user) });
@@ -248,6 +249,7 @@ router.post('/admin/login', async (req, res, next) => {
     if (!user.password_hash || !(await bcrypt.compare(password, user.password_hash))) {
       throw new AppError('账号或密码错误', 401);
     }
+    if (user.blacklisted) throw new AppError('账户已列入黑名单', 403);
     const token = signToken(user);
     ok(res, {
       token,

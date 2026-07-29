@@ -71,6 +71,7 @@ export async function reviewPartnerApplication(id, reviewerId, { approve, review
       where: { email },
       transaction: t,
     });
+    let createdNew = false;
     if (!user) {
       user = await User.create(
         {
@@ -85,10 +86,17 @@ export async function reviewPartnerApplication(id, reviewerId, { approve, review
         },
         { transaction: t },
       );
-    } else {
-      user.role = 'partner';
+      createdNew = true;
+    } else if (user.role === 'partner' && Number(user.supplier_id) === Number(supplier.id)) {
+      /* 已绑定本供应商，幂等复用 */
+    } else if (user.role === 'partner') {
       user.supplier_id = supplier.id;
       await user.save({ transaction: t });
+    } else {
+      throw new AppError(
+        `邮箱 ${email} 已是 ${user.role} 账号，请换邮箱或先解绑后再开通伙伴`,
+        409,
+      );
     }
 
     const skuNames = String(app.skus || 'H100,H200,PPU,算力 Token')
@@ -126,12 +134,15 @@ export async function reviewPartnerApplication(id, reviewerId, { approve, review
     app.user_id = user.id;
     app.reviewed_by = reviewerId;
     app.reviewed_at = new Date();
-    app.review_note = review_note || `已开通 ${email}（初始密码仅本次响应返回）`;
+    app.review_note = review_note || `已开通 ${email}`;
     await app.save({ transaction: t });
 
     const j = app.toJSON();
-    // 一次性出示给运营复制；勿写入持久化备注/日志
-    j.login_hint = { email, phone, initial_password: plain };
+    j.login_hint = {
+      email,
+      phone,
+      initial_password: createdNew ? plain : null,
+    };
     return j;
   });
 }

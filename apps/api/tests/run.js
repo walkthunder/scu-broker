@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * CompriX 全量功能测试入口
- * 覆盖 docs/REQUIREMENTS.md + docs/PRODUCT_V3.md（已落地的 Phase A/B 能力）。
+ * 对齐 docs/产品设计与需求.md 验收（现货 + 指数/远期 + FRD）。
  *
  *   npm run db:seed && npm run test:functional
  */

@@ -89,7 +89,7 @@ function goTodo(t) {
     <div v-if="bulletin" class="panel mt-6 p-4">
       <h2 class="text-sm font-medium text-slate-300">最新算力价格公告 · {{ bulletin.date }}</h2>
       <ul class="mt-3 space-y-1 text-sm text-slate-400">
-        <li v-for="line in bulletin.payload?.lines?.slice(0, 8) || []" :key="line.code">
+        <li v-for="line in (bulletin.payload?.lines || bulletin.snapshot?.lines || []).slice(0, 8)" :key="line.code">
           {{ line.code }} · S={{ line.settle_price }}
           <span v-if="line.is_reference" class="text-amber-500/80">（参考价）</span>
           · 预售参考 {{ line.presale_ref }}

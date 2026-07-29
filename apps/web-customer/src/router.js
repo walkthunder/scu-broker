@@ -37,7 +37,8 @@ const router = createRouter({
     { path: '/bills', name: 'bills', component: Bills, meta: { auth: true } },
     { path: '/about', name: 'about', component: About },
   ],
-  scrollBehavior() {
+  scrollBehavior(to) {
+    if (to.hash) return { el: to.hash, top: 72 };
     return { top: 0 };
   },
 });

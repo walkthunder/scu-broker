@@ -278,6 +278,23 @@ export async function completeDelivery(orderId, operatorId) {
       assertForwardTransition(contract.status, 'delivered');
       contract.status = 'delivered';
       contract.settle_mode = 'physical';
+      if (Number(contract.margin_frozen) > 0) {
+        const { postLedger } = await import('./ledger.js');
+        await postLedger(
+          {
+            userId: contract.buyer_id,
+            type: 'margin_release',
+            amount: Number(contract.margin_frozen),
+            ref_type: 'forward',
+            ref_id: contract.id,
+            note: '实物交割完成释放保证金',
+            operatorId,
+            mode: 'release',
+          },
+          t,
+        );
+        contract.margin_frozen = 0;
+      }
       await contract.save({ transaction: t });
     }
 
@@ -401,8 +418,31 @@ export async function defaultDelivery(orderId, operatorId, { reason, blacklist =
             t,
           );
           contract.margin_frozen = Number(contract.margin_frozen) - use;
-          await contract.save({ transaction: t });
         }
+        const leftover = Number(contract.margin_frozen) || 0;
+        if (leftover > 0) {
+          const { postLedger } = await import('./ledger.js');
+          await postLedger(
+            {
+              userId: buyerId,
+              type: 'margin_release',
+              amount: leftover,
+              ref_type: 'forward',
+              ref_id: contract.id,
+              note: '交割违约后释放剩余保证金',
+              operatorId,
+              mode: 'release',
+            },
+            t,
+          );
+          contract.margin_frozen = 0;
+        }
+        if (['open', 'delivery_pending'].includes(contract.status)) {
+          assertForwardTransition(contract.status, 'cancelled');
+          contract.status = 'cancelled';
+          contract.cancel_reason = reason || '交割违约';
+        }
+        await contract.save({ transaction: t });
       }
     } else if (margin > 0 && buyerId) {
       const { postLedger } = await import('./ledger.js');

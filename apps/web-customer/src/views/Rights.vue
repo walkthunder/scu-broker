@@ -1,10 +1,18 @@
 <script setup>
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { api } from '../api';
 
 const list = ref([]);
 const err = ref('');
 const expanded = ref(null);
+
+const today = computed(() =>
+  new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' }),
+);
+
+function canExercise(r) {
+  return r.status === 'open' && r.window_start <= today.value && r.window_end >= today.value;
+}
 
 async function load() {
   try {
@@ -101,7 +109,7 @@ onMounted(load);
               确认
             </button>
             <button
-              v-if="r.status === 'open'"
+              v-if="canExercise(r)"
               class="btn-primary text-sm"
               type="button"
               @click="exercise(r.id)"

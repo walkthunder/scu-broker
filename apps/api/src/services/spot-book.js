@@ -101,6 +101,7 @@ async function matchOrder(order, transaction) {
       region: order.region,
       status: { [Op.in]: ['open', 'partial'] },
       id: { [Op.ne]: order.id },
+      user_id: { [Op.ne]: order.user_id },
     };
     if (order.side === 'buy') {
       where.side = 'sell';
@@ -158,9 +159,10 @@ async function matchOrder(order, transaction) {
 
     await consumeCapacity('spot', order.sku_id, order.region, qty, transaction);
 
-    // 买方成交：冻结保证金转为扣款（unfreeze_debit）
-    if (buy.price) {
-      const m = await marginFor(buy.price, qty);
+    // 买方成交：冻结保证金转为扣款（按成交价计，避免市价 0 漏扣）
+    const fillMarginBase = Number(px) > 0 ? px : Number(buy.price);
+    if (Number(fillMarginBase) > 0) {
+      const m = await marginFor(fillMarginBase, qty);
       if (m > 0) {
         await postLedger(
           {
@@ -236,6 +238,10 @@ export async function placeSpotOrder(userId, body) {
   const book = await getOrderBook(sku_id, region);
   const impactSide = side === 'buy' ? book.asks : book.bids;
   const impact = estimateImpact(impactSide, qty);
+  let bookPrice = type === 'limit' ? Number(price) : Number(impact.avg_price);
+  if (type === 'market' && !(bookPrice > 0)) {
+    throw new AppError(side === 'buy' ? '无卖盘，市价买单无法成交' : '无买盘，市价卖单无法成交');
+  }
 
   return sequelize.transaction(async (t) => {
     if (side === 'sell') {
@@ -249,13 +255,13 @@ export async function placeSpotOrder(userId, body) {
         region,
         side,
         order_type: type,
-        price: type === 'market' ? impact.avg_price || price || 0 : price,
+        price: bookPrice,
         qty,
         expires_at: expires_at || null,
       },
       { transaction: t },
     );
-    if (side === 'buy' && order.price) {
+    if (side === 'buy' && Number(order.price) > 0) {
       const need = await marginFor(order.price, qty);
       await postLedger(
         {

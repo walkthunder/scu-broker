@@ -32,6 +32,15 @@ export async function consumeCapacity(kind, skuId, region, qty, transaction) {
     transaction,
     lock: transaction.LOCK.UPDATE,
   });
+  // 未登记产能时与 assertCapacity 一致：不扣减
+  if (!rows.length) {
+    const any = await PartnerCapacity.findAll({
+      where: { sku_id: skuId, region, active: true },
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+    if (!any.length) return;
+  }
   let left = Number(qty);
   for (const r of rows) {
     if (left <= 0) break;

@@ -1,34 +1,26 @@
 # 功能测试说明
 
-对齐 [`docs/REQUIREMENTS.md`](../../../docs/REQUIREMENTS.md)。
+对齐 [`docs/产品设计与需求.md`](../../../docs/产品设计与需求.md) 验收章节。
 
 ## 运行
 
 ```bash
-# 1) MySQL + API 已启动
 docker compose up -d mysql
-cd apps/api && npm run dev
-
-# 2) 初始化数据后全量测
-cd apps/api
-npm run db:seed
-npm run db:seed:demo
-npm run test:functional
+cd apps/api && npm run db:seed && npm run test:functional
+# 仓库根目录也可: npm test
 ```
 
-## 用例与需求映射
+## 用例前缀
 
 | 前缀 | 含义 |
 |------|------|
-| R-AUTH-* | 鉴权 |
-| R-P0-* | P0 功能 |
-| R-P1-* | P1 功能 |
-| R-GAP-* | PRD 缺口约定 |
-| R-ACCEPT-* | 验收标准 |
-| R-INFRA | 基础设施/错误体 |
+| R-AUTH-* / R-P0-* / R-P1-* | 现货鉴权与功能 |
+| R-GAP-* / R-ACCEPT-* / R-INFRA | 缺口约定、验收、基建 |
+| V3-* / V4-* | 行情运营 / 指数远期交割 |
+| FR-* | 硅元引擎 FRD |
 
 ## 目录
 
-- `lib/` — HTTP / assert / auth / runner
-- `cases/` — 按域拆分的用例
-- `run.js` — 入口
+- `lib/` — HTTP / assert / auth / runner  
+- `cases/` — 按域拆分  
+- `run.js` — 入口  

@@ -27,7 +27,6 @@ import {
   adminDeposit,
   getBuyingPower,
   listEntries,
-  ensureAccount,
   getLedgerBreakdown,
   entriesToCsv,
 } from '../services/ledger.js';
@@ -49,7 +48,7 @@ import {
   presentRight,
 } from '../services/right-contract.js';
 import { PartnerCapacity, CrmLead, CrmNote, SpotBookOrder } from '../models/frd-models.js';
-import { User, Sku, Supplier } from '../models/index.js';
+import { User } from '../models/index.js';
 import { setDeliveryIntent, listBillsForUser } from '../services/forward-settle.js';
 import { todayShanghai } from '../utils/market.js';
 import { Op } from 'sequelize';
@@ -215,7 +214,7 @@ router.post('/price-bulletins/:date/publish', ...staff, async (req, res, next) =
   }
 });
 
-router.get('/price-bulletins', async (req, res, next) => {
+router.get('/price-bulletins', ...staff, async (req, res, next) => {
   try {
     const where = {};
     if (req.query.status) where.status = req.query.status;
@@ -680,7 +679,7 @@ router.get('/console/me', ...portal, async (req, res, next) => {
           id: u.contract_id,
           shortfall: u.shortfall,
           label: `预售#${u.contract_id} 需追保 ${u.shortfall}`,
-          href: '/forwards',
+          href: '/forwards?tab=open',
         })),
         ...rights
           .filter((r) => r.status === 'pending_confirm' && !r.buyer_confirmed_at)
@@ -708,15 +707,20 @@ router.get('/console/me', ...portal, async (req, res, next) => {
             type: 'forward_confirm',
             id: f.id,
             label: `预售#${f.id} 待确认`,
-            href: '/forwards',
+            href: '/forwards?tab=pending',
           })),
         ...forwards
-          .filter((f) => f.status === 'open' && (f.delivery_intent === 'unset' || !f.delivery_intent))
+          .filter(
+            (f) =>
+              f.status === 'open' &&
+              f.intent_window_open &&
+              (f.delivery_intent === 'unset' || !f.delivery_intent),
+          )
           .map((f) => ({
             type: 'delivery_intent',
             id: f.id,
             label: `预售#${f.id} 待交割意愿`,
-            href: '/forwards',
+            href: '/forwards?tab=open',
           })),
         ...bills
           .filter((b) => b.pay_status !== 'done' && b.cashflow === 'pay')

@@ -12,14 +12,14 @@
       <section id="index-rules" class="panel scroll-mt-24 p-5">
         <h2 class="font-medium text-slate-100">指数规则（摘要）</h2>
         <p class="mt-2 text-slate-400">
-          每个价格指数绑定一个公开 SKU 参考价；运营按日写入结算价 S，发布后才可用于远期盯市与到期结算。已发布当日 S
-          不可被结算覆盖。未发布则不可开新仓、不可批结算。
+          每个指数锚定一个 SKU；交易日产出结算价 S，须发布后才可用于远期结算。跳变超阈值需复核。某日 S
+          一旦写入结算账单，禁止改价或撤销。指数与参考价不构成要约。
         </p>
       </section>
       <section id="settle-rules" class="panel scroll-mt-24 p-5">
         <h2 class="font-medium text-slate-100">结算规则（摘要）</h2>
         <p class="mt-2 text-slate-400">
-          现金结算差价 = (S − X) × 数量。S &gt; X 时卖方付买方；S &lt; X 时买方付卖方。账单出现在「账单」页，线下收付后由
+          现金结算差价 = (S − X) × 数量（买方视角）。S &gt; X 时卖方付买方；S &lt; X 时买方付卖方。账单见「账单」页，线下收付后由
           Broker 确认。
         </p>
       </section>

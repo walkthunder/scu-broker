@@ -108,12 +108,13 @@ export async function createRight(body, brokerId) {
     await assertPutPoolCapacity(Number(strike) * Number(qty));
   }
 
-  const { assertCapacity } = await import('./partner-capacity.js');
+  const { assertCapacity, consumeCapacity } = await import('./partner-capacity.js');
   const { assertNotUnderMarginBlock } = await import('./margin-monitor.js');
   await assertNotUnderMarginBlock(buyer_id);
 
   return sequelize.transaction(async (t) => {
     await assertCapacity('rights', sku_id, region, qty, t);
+    await consumeCapacity('rights', sku_id, region, qty, t);
     return RightContract.create(
       {
         kind,

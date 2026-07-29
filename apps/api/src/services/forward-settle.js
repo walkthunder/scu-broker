@@ -178,13 +178,14 @@ export async function createForward(body, brokerId) {
 
   const { assertBuyingPower, postLedger } = await import('./ledger.js');
   const { assertNotUnderMarginBlock } = await import('./margin-monitor.js');
-  const { assertCapacity } = await import('./partner-capacity.js');
+  const { assertCapacity, consumeCapacity } = await import('./partner-capacity.js');
   await assertNotUnderMarginBlock(buyer_id);
 
   return sequelize.transaction(async (t) => {
     await assertBuyingPower(buyer_id, marginFrozen, t);
     if (index.sku_id) {
       await assertCapacity('forward', index.sku_id, reg, qty, t);
+      await consumeCapacity('forward', index.sku_id, reg, qty, t);
     }
     const contract = await ForwardContract.create(
       {
@@ -511,21 +512,30 @@ export async function settleOne(contractId, { asOf = todayShanghai() } = {}) {
       { transaction: t },
     );
     locked.status = 'settled';
-    if (Number(locked.margin_frozen) > 0) {
+    const frozen = Number(locked.margin_frozen) || 0;
+    if (frozen > 0) {
       const { postLedger } = await import('./ledger.js');
-      await postLedger(
-        {
-          userId: locked.buyer_id,
-          type: 'margin_release',
-          amount: Number(locked.margin_frozen),
-          ref_type: 'forward',
-          ref_id: locked.id,
-          note: '预售结算释放保证金',
-          mode: 'release',
-        },
-        t,
-      );
-      locked.margin_frozen = 0;
+      // 买方应付差价时保留冻结保证金供 confirmBillPay 扣款，其余释放
+      const keep =
+        settled.pay_direction === 'buyer_to_seller' && Number(settled.amount) > 0
+          ? Math.min(frozen, Number(settled.amount))
+          : 0;
+      const releaseAmt = frozen - keep;
+      if (releaseAmt > 0) {
+        await postLedger(
+          {
+            userId: locked.buyer_id,
+            type: 'margin_release',
+            amount: releaseAmt,
+            ref_type: 'forward',
+            ref_id: locked.id,
+            note: '预售结算释放保证金',
+            mode: 'release',
+          },
+          t,
+        );
+      }
+      locked.margin_frozen = keep;
     }
     await locked.save({ transaction: t });
     return { bill, ...settled };
@@ -595,6 +605,11 @@ export async function confirmBillPay(billId, operatorId) {
         bill.pay_direction === 'buyer_to_seller' ? contract.buyer_id : contract.seller_id;
       const payee =
         bill.pay_direction === 'buyer_to_seller' ? contract.seller_id : contract.buyer_id;
+      const buyerFrozen = Number(contract.margin_frozen) || 0;
+      const payerMode =
+        Number(payer) === Number(contract.buyer_id) && buyerFrozen > 0
+          ? 'unfreeze_debit'
+          : 'debit';
       await postLedger(
         {
           userId: payer,
@@ -604,7 +619,7 @@ export async function confirmBillPay(billId, operatorId) {
           ref_id: bill.id,
           note: '远期差价结算扣款',
           operatorId,
-          mode: 'debit',
+          mode: payerMode,
         },
         t,
       );
@@ -621,6 +636,27 @@ export async function confirmBillPay(billId, operatorId) {
         },
         t,
       );
+      if (buyerFrozen > 0) {
+        contract.margin_frozen = 0;
+        await contract.save({ transaction: t });
+      }
+    } else if (Number(contract.margin_frozen) > 0) {
+      const { postLedger } = await import('./ledger.js');
+      await postLedger(
+        {
+          userId: contract.buyer_id,
+          type: 'margin_release',
+          amount: Number(contract.margin_frozen),
+          ref_type: 'forward',
+          ref_id: contract.id,
+          note: '账单确认后释放剩余保证金',
+          operatorId,
+          mode: 'release',
+        },
+        t,
+      );
+      contract.margin_frozen = 0;
+      await contract.save({ transaction: t });
     }
 
     bill.pay_status = 'done';

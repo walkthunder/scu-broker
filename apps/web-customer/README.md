@@ -1,5 +1,7 @@
-# Vue 3 + Vite
+# web-customer
 
-This template should help get you started developing with Vue 3 in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+客户前台（Vue3 + Tailwind）。产品说明见仓库根 [README.md](../../README.md) 与 [docs/产品设计与需求.md](../../docs/产品设计与需求.md)。
 
-Learn more about IDE Support for Vue in the [Vue Docs Scaling up Guide](https://vuejs.org/guide/scaling-up/tooling.html#ide-support).
+```bash
+npm install && npm run dev   # http://localhost:5173
+```

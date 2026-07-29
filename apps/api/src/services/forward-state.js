@@ -23,7 +23,7 @@ export const FORWARD_STATUSES = [
 const ALLOWED = {
   pending_confirm: ['open', 'cancelled'],
   open: ['settled', 'delivery_pending', 'cancelled'],
-  delivery_pending: ['delivered'],
+  delivery_pending: ['delivered', 'cancelled'],
   draft: ['pending_confirm', 'cancelled'],
 };
 
