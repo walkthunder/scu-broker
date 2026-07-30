@@ -67,7 +67,7 @@ onMounted(load);
   <div>
     <div class="page-head">
       <h2>伙伴入驻与产能</h2>
-      <p class="page-desc">审核伙伴申请、录入/调整产能余量（伙伴门户可自助改余量）</p>
+      <p class="page-desc">审核伙伴申请、录入/调整产能余量（伙伴门户仅可维护 Bid/Ask，产能由运营调整）</p>
     </div>
     <el-card shadow="never">
       <template #header>入驻申请</template>

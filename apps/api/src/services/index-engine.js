@@ -71,19 +71,28 @@ export async function runIndexEngineForIndex(indexId, date = todayShanghai(), us
     const ref = await ReferencePrice.findOne({
       where: { sku_id: index.sku_id, region: index.region || 'shanghai', date },
     });
-    const { MakerQuote } = await import('../models/frd-models.js');
+    const { MakerQuote, PartnerCapacity } = await import('../models/frd-models.js');
+    const region = index.region || 'shanghai';
     const mm = await MakerQuote.findOne({
-      where: {
-        sku_id: index.sku_id,
-        region: index.region || 'shanghai',
-        date,
-      },
+      where: { sku_id: index.sku_id, region, date },
       order: [['id', 'DESC']],
     });
-    const mmMid =
+    let mmMid =
       mm && Number(mm.bid) > 0 && Number(mm.ask) > 0
         ? (Number(mm.bid) + Number(mm.ask)) / 2
         : null;
+    if (mmMid == null) {
+      // 无运营做市报价时，用伙伴产能上的双边报价均值（活跃产能）
+      const partners = await PartnerCapacity.findAll({
+        where: { sku_id: index.sku_id, region, active: true },
+      });
+      const mids = partners
+        .filter((p) => Number(p.quote_bid) > 0 && Number(p.quote_ask) > 0)
+        .map((p) => (Number(p.quote_bid) + Number(p.quote_ask)) / 2);
+      if (mids.length) {
+        mmMid = mids.reduce((s, x) => s + x, 0) / mids.length;
+      }
+    }
     let fallback = null;
     let method = 'reference';
     if (mmMid != null && prev) {

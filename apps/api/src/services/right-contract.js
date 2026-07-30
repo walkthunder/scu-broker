@@ -7,6 +7,8 @@ import { getLatestPublished } from './index-price.js';
 import { assertBuyingPower, postLedger } from './ledger.js';
 import { todayShanghai, addDaysShanghai } from '../utils/market.js';
 import { REGION_CODES } from '../constants/platform.js';
+import { assertCapacity, consumeCapacity, releaseCapacity } from './partner-capacity.js';
+import { assertNotionalLimits } from './exposure.js';
 import { sequelize } from '../config/database.js';
 
 /** 权利金参考（简化 BS 风格）：内在价值 + 时间价值；对外展示 IV≈σ、TV */
@@ -108,16 +110,13 @@ export async function createRight(body, brokerId) {
     qty: Number(qty),
   });
 
-  if (kind === 'put') {
-    await assertPutPoolCapacity(Number(strike) * Number(qty));
-  }
-
-  const { assertCapacity, consumeCapacity } = await import('./partner-capacity.js');
   const { assertNotUnderMarginBlock } = await import('./margin-monitor.js');
-  const { assertNotionalLimits } = await import('./exposure.js');
   await assertNotUnderMarginBlock(buyer_id);
 
   return sequelize.transaction(async (t) => {
+    if (kind === 'put') {
+      await assertPutPoolCapacity(Number(strike) * Number(qty), t);
+    }
     await assertNotionalLimits(
       buyer_id,
       Number(premium) + Number(strike) * Number(qty) * 0.1,
@@ -305,6 +304,7 @@ export async function exerciseRight(id, userId, { channel_id } = {}) {
       row.status = 'exercised';
       row.exercised_at = new Date();
       await row.save({ transaction: t });
+      await releaseCapacity('rights', row.sku_id, row.region, row.qty, t);
       return presentRight(row);
     }
 
@@ -359,25 +359,28 @@ export async function exerciseRight(id, userId, { channel_id } = {}) {
         t,
       );
     }
+    await releaseCapacity('rights', row.sku_id, row.region, row.qty, t);
     return presentRight(row);
   });
 }
 
 export async function expireRights(asOf = todayShanghai()) {
-  const rows = await RightContract.findAll({
+  const openRows = await RightContract.findAll({
     where: { status: 'open', window_end: { [Op.lt]: asOf } },
   });
+  const pendingRows = await RightContract.findAll({
+    where: { status: 'pending_confirm', window_end: { [Op.lt]: asOf } },
+  });
   let n = 0;
-  for (const row of rows) {
+  for (const row of [...openRows, ...pendingRows]) {
     await sequelize.transaction(async (t) => {
       const locked = await RightContract.findByPk(row.id, {
         transaction: t,
         lock: t.LOCK.UPDATE,
       });
-      if (!locked || locked.status !== 'open') return;
+      if (!locked || !['open', 'pending_confirm'].includes(locked.status)) return;
       locked.status = 'expired';
       await locked.save({ transaction: t });
-      const { releaseCapacity } = await import('./partner-capacity.js');
       await releaseCapacity('rights', locked.sku_id, locked.region, locked.qty, t);
       n += 1;
     });

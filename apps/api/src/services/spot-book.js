@@ -269,13 +269,18 @@ export async function placeSpotOrder(userId, body) {
   if (type === 'market' && !(bookPrice > 0)) {
     throw new AppError(side === 'buy' ? '无卖盘，市价买单无法成交' : '无买盘，市价卖单无法成交');
   }
+  // 市价买单：按冲击成本加 5% 缓冲冻结，减轻读簿与撮合间盘口恶化导致的透支
+  let freezePrice = bookPrice;
+  if (side === 'buy' && type === 'market' && impact.avg_price > 0) {
+    freezePrice = Math.round(Number(impact.avg_price) * 1.05 * 10000) / 10000;
+  }
 
   return sequelize.transaction(async (t) => {
     if (side === 'sell') {
       await assertCapacity('spot', sku_id, region, qty, t);
     }
-    if (side === 'buy' && bookPrice > 0) {
-      await assertNotionalLimits(userId, bookPrice * Number(qty), t);
+    if (side === 'buy' && freezePrice > 0) {
+      await assertNotionalLimits(userId, freezePrice * Number(qty), t);
     }
 
     const order = await SpotBookOrder.create(
@@ -285,7 +290,7 @@ export async function placeSpotOrder(userId, body) {
         region,
         side,
         order_type: type,
-        price: bookPrice,
+        price: type === 'market' ? freezePrice : bookPrice,
         qty,
         expires_at: expires_at || null,
       },
@@ -300,7 +305,7 @@ export async function placeSpotOrder(userId, body) {
           amount: need,
           ref_type: 'spot_book',
           ref_id: order.id,
-          note: '现货挂单全额冻结',
+          note: type === 'market' ? '现货市价单缓冲冻结' : '现货挂单全额冻结',
           mode: 'freeze',
         },
         t,

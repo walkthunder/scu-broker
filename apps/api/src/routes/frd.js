@@ -11,18 +11,14 @@ import {
 } from '../services/channel-deal.js';
 import {
   runEngineAll,
-  runIndexEngineForIndex,
   submitBulletinForReview,
   reviewPublishBulletin,
   getCurve,
-  suggestPresalePrice,
   getBulletinExportHtml,
   getNationalComposite,
 } from '../services/index-engine.js';
 import { getPlatformParams, setPlatformParam, seedPlatformDefaults } from '../services/platform-config.js';
 import { getLatestPublished } from '../services/index-price.js';
-import { PriceIndex } from '../models/index.js';
-import { PriceBulletin as PB } from '../models/frd-models.js';
 import {
   adminDeposit,
   adminWithdraw,
@@ -42,15 +38,14 @@ import {
   confirmRight,
   confirmRightFee,
   exerciseRight,
-  expireRights,
   listRights,
   putPoolStats,
   refPremium,
   presentRight,
   selfOpenRight,
 } from '../services/right-contract.js';
-import { PartnerCapacity, CrmLead, CrmNote, SpotBookOrder, MakerQuote } from '../models/frd-models.js';
-import { User } from '../models/index.js';
+import { PartnerCapacity, CrmLead, CrmNote, SpotBookOrder, MakerQuote, PriceBulletin as PB } from '../models/frd-models.js';
+import { User, PriceIndex } from '../models/index.js';
 import {
   setDeliveryIntent,
   listBillsForUser,
@@ -145,17 +140,9 @@ router.post('/channel-deals/:id/void', ...staff, async (req, res, next) => {
 
 router.post('/channel-deals/import', ...staff, async (req, res, next) => {
   try {
-    if (req.body.csv) {
-      const result = await importChannelDealsCsv(req.body.csv, req.user.id);
-      ok(res, result.imported, result.errors?.length ? `部分失败 ${result.errors.length} 行` : 'ok');
-      return;
-    }
-    const rows = Array.isArray(req.body.rows) ? req.body.rows : [];
-    const out = [];
-    for (const r of rows) {
-      out.push(await createChannelDeal({ ...r, source: 'api' }, req.user.id));
-    }
-    ok(res, out);
+    if (!req.body.csv) throw new AppError('请提供 csv 文本');
+    const result = await importChannelDealsCsv(req.body.csv, req.user.id);
+    ok(res, result.imported, result.errors?.length ? `部分失败 ${result.errors.length} 行` : 'ok');
   } catch (e) {
     next(e);
   }
@@ -192,14 +179,6 @@ router.post('/index-engine/run', ...staff, async (req, res, next) => {
   try {
     const date = req.body.date || todayShanghai();
     ok(res, await runEngineAll(date, req.user.id));
-  } catch (e) {
-    next(e);
-  }
-});
-
-router.post('/index-engine/:indexId/run', ...staff, async (req, res, next) => {
-  try {
-    ok(res, await runIndexEngineForIndex(Number(req.params.indexId), req.body.date || todayShanghai(), req.user.id));
   } catch (e) {
     next(e);
   }
@@ -259,34 +238,7 @@ router.get('/curves', async (req, res, next) => {
   }
 });
 
-router.get('/presale-suggest', ...staff, async (req, res, next) => {
-  try {
-    const indexId = Number(req.query.index_id);
-    const index = await PriceIndex.findByPk(indexId);
-    if (!index) throw new AppError('指数不存在', 404);
-    const print = await getLatestPublished(indexId);
-    if (!print) throw new AppError('无已发布 S');
-    const params = await getPlatformParams();
-    ok(res, {
-      spot: Number(print.settle_price),
-      ...suggestPresalePrice(Number(print.settle_price), params),
-    });
-  } catch (e) {
-    next(e);
-  }
-});
-
 // —— 账本 ——
-router.get('/ledger/me', ...portal, async (req, res, next) => {
-  try {
-    const bal = await getBuyingPower(req.user.id);
-    const entries = await listEntries(req.user.id);
-    ok(res, { ...bal, entries });
-  } catch (e) {
-    next(e);
-  }
-});
-
 router.post('/ledger/deposit', ...staff, async (req, res, next) => {
   try {
     await adminDeposit(req.body.user_id, req.body.amount, req.user.id, req.body.note);
@@ -457,35 +409,9 @@ router.post('/rights/premium-ref', ...portal, async (req, res, next) => {
   }
 });
 
-router.post('/rights/expire', ...staff, async (_req, res, next) => {
-  try {
-    ok(res, { expired: await expireRights() });
-  } catch (e) {
-    next(e);
-  }
-});
-
 router.get('/rights/put-pool', ...staff, async (_req, res, next) => {
   try {
     ok(res, await putPoolStats());
-  } catch (e) {
-    next(e);
-  }
-});
-
-router.get('/rights/portfolio', ...portal, async (req, res, next) => {
-  try {
-    const rights = await listRights({ userId: req.user.id, status: 'open' });
-    const totalPremium = rights.reduce((s, r) => s + Number(r.premium), 0);
-    const delta = rights.reduce((s, r) => s + Number(r.analytics?.delta || 0) * Number(r.qty), 0);
-    const varRough = Math.round(totalPremium * 0.25 * 100) / 100;
-    ok(res, {
-      count: rights.length,
-      total_premium: Math.round(totalPremium * 100) / 100,
-      portfolio_delta: Math.round(delta * 100) / 100,
-      var_simple: varRough,
-      positions: rights,
-    });
   } catch (e) {
     next(e);
   }
@@ -605,8 +531,12 @@ router.put('/partner/capacities/:id', ...partner, async (req, res, next) => {
     if (!row || Number(row.supplier_id) !== Number(u.supplier_id)) {
       throw new AppError('产能记录不存在或无权修改', 404);
     }
-    for (const f of ['spot_qty', 'forward_qty', 'rights_qty', 'quote_bid', 'quote_ask', 'active']) {
+    for (const f of ['quote_bid', 'quote_ask']) {
       if (req.body[f] !== undefined) row[f] = req.body[f];
+    }
+    // 产能余量仅运营可改，防止伙伴自抬额度绕过 assertCapacity
+    if (req.body.spot_qty != null || req.body.forward_qty != null || req.body.rights_qty != null) {
+      throw new AppError('产能余量请联系运营调整，伙伴仅可维护双边报价', 403);
     }
     await row.save();
     ok(res, row);
@@ -826,14 +756,6 @@ router.get('/console/me', ...portal, async (req, res, next) => {
   }
 });
 
-router.get('/ledger/me/breakdown', ...portal, async (req, res, next) => {
-  try {
-    ok(res, await getLedgerBreakdown(req.user.id));
-  } catch (e) {
-    next(e);
-  }
-});
-
 router.get('/ledger/:userId/export', ...staff, async (req, res, next) => {
   try {
     const entries = await listEntries(Number(req.params.userId), 5000);
@@ -877,15 +799,6 @@ router.post('/jobs/daily-publish-prep', ...staff, async (req, res, next) => {
 router.post('/jobs/margin-monitor', ...staff, async (_req, res, next) => {
   try {
     ok(res, await monitorForwardMargins());
-  } catch (e) {
-    next(e);
-  }
-});
-
-router.get('/mtm/me', ...portal, async (req, res, next) => {
-  try {
-    const { listMtmStatements } = await import('../services/mtm-statements.js');
-    ok(res, await listMtmStatements(req.user.id, req.query));
   } catch (e) {
     next(e);
   }

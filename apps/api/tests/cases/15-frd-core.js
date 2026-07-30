@@ -102,9 +102,9 @@ describe('FRD 全量核心', ({ it }) => {
     const book = await req(`/frd/spot/book?sku_id=${h100.id}&region=shanghai&qty=2`);
     assertOk(book);
     assert('bids' in book.json.data && 'asks' in book.json.data);
-    const me = await req('/frd/ledger/me', { headers: auth(buyerTok) });
+    const me = await req('/frd/console/me', { headers: auth(buyerTok) });
     assertOk(me);
-    assert(me.json.data.available >= 0);
+    assert(me.json.data.ledger?.available >= 0);
   });
 
   it('认购权益开仓确认收费', ['FR-4.1'], async () => {
@@ -270,9 +270,9 @@ describe('FRD 全量核心', ({ it }) => {
     assertOk(risk);
     assert(risk.json.data.put_pool);
     const { token: buyerTok } = await customerLogin('buyer@comprix.local');
-    const mine = await req('/frd/mtm/me', { headers: auth(buyerTok) });
+    const mine = await req('/frd/console/me', { headers: auth(buyerTok) });
     assertOk(mine);
-    assert(Array.isArray(mine.json.data));
+    assert(Array.isArray(mine.json.data.mtm_statements));
   });
 
   it('伙伴入驻申请', ['FR-6.1'], async () => {

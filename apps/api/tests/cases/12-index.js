@@ -1,8 +1,9 @@
 import { describe } from '../lib/runner.js';
 import { req } from '../lib/http.js';
-import { assert, assertOk, assertFail } from '../lib/assert.js';
+import { assert, assertOk } from '../lib/assert.js';
 import { adminLogin, auth } from '../lib/auth.js';
-import { todayShanghai, addDaysShanghai } from '../../src/utils/market.js';
+import { todayShanghai } from '../../src/utils/market.js';
+import { tryUpsertPrint } from '../lib/index-print.js';
 
 describe('V4 价格指数', ({ it }) => {
   it('Admin 可列出指数并生成/发布结算价', ['V4-A1', 'V4-A2'], async () => {
@@ -12,30 +13,11 @@ describe('V4 价格指数', ({ it }) => {
     assert(Array.isArray(list.json.data) && list.json.data.length >= 1, '至少 1 个指数');
     const idx = list.json.data.find((x) => x.code === 'H100-M') || list.json.data[0];
 
-    // 找未锁定日期；若已发布则先撤销再覆写
-    let date = null;
-    let gen = null;
-    for (let i = 5; i < 25; i++) {
-      const d = addDaysShanghai(todayShanghai(), -i);
-      await req(`/admin/indices/${idx.id}/prints/${d}/unpublish`, {
-        method: 'POST',
-        headers: auth(token),
-      }).catch(() => null);
-      gen = await req(`/admin/indices/${idx.id}/prints`, {
-        method: 'POST',
-        headers: auth(token),
-        body: { date: d, settle_price: 80000 },
-      });
-      if (gen.json?.code === 0) {
-        date = d;
-        break;
-      }
-    }
-    assertOk(gen);
-    assert(date, '应找到可写入日期');
-    assert(['draft', 'pending_review', 'published'].includes(gen.json.data.status));
+    const hit = await tryUpsertPrint(token, idx.id, 80000, { preferredDate: todayShanghai() });
+    assert(hit, '应找到可写入日期');
+    assert(['draft', 'pending_review', 'published'].includes(hit.data.status));
 
-    const pub = await req(`/admin/indices/${idx.id}/prints/${date}/publish`, {
+    const pub = await req(`/admin/indices/${idx.id}/prints/${hit.date}/publish`, {
       method: 'POST',
       headers: auth(token),
     });
@@ -59,21 +41,8 @@ describe('V4 价格指数', ({ it }) => {
     const list = await req('/admin/indices', { headers: auth(token) });
     assertOk(list);
     const idx = list.json.data.find((x) => x.code === 'H100-M') || list.json.data[0];
-    let r = null;
-    for (let i = 4; i < 30; i++) {
-      const date = addDaysShanghai(todayShanghai(), -i);
-      await req(`/admin/indices/${idx.id}/prints/${date}/unpublish`, {
-        method: 'POST',
-        headers: auth(token),
-      }).catch(() => null);
-      r = await req(`/admin/indices/${idx.id}/prints`, {
-        method: 'POST',
-        headers: auth(token),
-        body: { date, settle_price: 1 },
-      });
-      if (r.json?.code === 0) break;
-    }
-    assertOk(r);
-    assert(['draft', 'pending_review'].includes(r.json.data.status));
+    const hit = await tryUpsertPrint(token, idx.id, 1, { preferredDate: todayShanghai() });
+    assert(hit, '应找到可写入日期');
+    assert(['draft', 'pending_review'].includes(hit.data.status));
   });
 });

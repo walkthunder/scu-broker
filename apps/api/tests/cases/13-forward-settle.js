@@ -3,34 +3,15 @@ import { req } from '../lib/http.js';
 import { assert, assertOk, assertFail } from '../lib/assert.js';
 import { customerLogin, adminLogin, auth, brokerLogin } from '../lib/auth.js';
 import { todayShanghai, addDaysShanghai } from '../../src/utils/market.js';
+import { ensurePublishedPrint } from '../lib/index-print.js';
 
 async function ensureIndexPublished(token, settlePrice, preferredDate) {
   const list = await req('/admin/indices', { headers: auth(token) });
   assertOk(list);
   const idx = list.json.data.find((x) => x.code === 'H100-M') || list.json.data[0];
   assert(idx, '需要种子指数');
-
-  for (let i = 0; i < 90; i++) {
-    const date = addDaysShanghai(preferredDate, -i);
-    const upsert = await req(`/admin/indices/${idx.id}/prints`, {
-      method: 'POST',
-      headers: auth(token),
-      body: { date, settle_price: settlePrice },
-    });
-    if (upsert.json?.code !== 0) {
-      // 已锁定则换更早一天
-      continue;
-    }
-    if (upsert.json.data.status !== 'published') {
-      const pub = await req(`/admin/indices/${idx.id}/prints/${date}/publish`, {
-        method: 'POST',
-        headers: auth(token),
-      });
-      if (pub.json?.code !== 0) continue;
-    }
-    return { idx, date };
-  }
-  throw new Error('无法找到可写入的结算价日期');
+  const { date } = await ensurePublishedPrint(token, idx.id, settlePrice, preferredDate);
+  return { idx, date };
 }
 
 describe('V4 远期现金结算', ({ it }) => {

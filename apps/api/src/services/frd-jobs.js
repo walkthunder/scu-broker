@@ -1,6 +1,5 @@
 import { Op } from 'sequelize';
 import { todayShanghai } from '../utils/market.js';
-import { getPlatformParams } from './platform-config.js';
 import { runEngineAll, submitBulletinForReview } from './index-engine.js';
 import { expireRights } from './right-contract.js';
 import { expirePendingConfirms, settleBatch } from './forward-settle.js';
@@ -28,18 +27,17 @@ export async function expireSpotOrders(now = new Date()) {
       if (!order || !['open', 'partial'].includes(order.status)) return;
       const unfilled = Number(order.qty) - Number(order.filled_qty);
       if (order.side === 'buy' && unfilled > 0 && order.price) {
-        const params = await getPlatformParams();
-        const pct = Number(params.margin_initial_pct) / 100;
-        const m = Math.round(Number(order.price) * unfilled * pct * 100) / 100;
+        // 与挂单一致：按全额名义释放未成交冻结（非初始保证金比例）
+        const m = Math.round(Number(order.price) * unfilled * 100) / 100;
         if (m > 0) {
           await postLedger(
             {
               userId: order.user_id,
               type: 'margin_release',
               amount: m,
-              ref_type: 'spot_order',
+              ref_type: 'spot_book',
               ref_id: order.id,
-              note: '挂单过期释放保证金',
+              note: '挂单过期释放全额冻结',
               mode: 'release',
             },
             t,
@@ -81,17 +79,6 @@ export async function runDailyJobs({ date = todayShanghai(), userId = null, sett
   const publish = await dailyPublishPrep(date, userId);
   const mtm = await runMtmJob(date);
   const expired = await runExpireAll();
-  let settlement = null;
-  if (settle) {
-    settlement = await settleBatch({ asOf: date });
-  }
-  const params = await getPlatformParams();
-  return {
-    publish_hour: params.publish_hour_shanghai,
-    publish,
-    mtm,
-    margins: mtm.margins,
-    expired,
-    settlement,
-  };
+  const settlement = settle ? await settleBatch({ asOf: date }) : null;
+  return { publish, mtm, margins: mtm.margins, expired, settlement };
 }

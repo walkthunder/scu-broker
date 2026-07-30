@@ -6,7 +6,7 @@ import {
   PriceIndex,
 } from '../models/index.js';
 import { AppError } from '../utils/errors.js';
-import { todayShanghai } from '../utils/market.js';
+import { todayShanghai, addDaysShanghai, addMonthsShanghai } from '../utils/market.js';
 import { sequelize } from '../config/database.js';
 import { getLatestPublished } from './index-price.js';
 import {
@@ -14,7 +14,7 @@ import {
   notifyForwardOpened,
   notifyForwardBill,
 } from './notify.js';
-import { isInDeliveryWindow } from './delivery-window.js';
+import { isInDeliveryWindow, deliveryWindowDaysBefore } from './delivery-window.js';
 import {
   assertForwardTransition,
   canRequestDelivery,
@@ -25,6 +25,11 @@ import {
   expireStalePendingDeliveries,
   deliveryRatioStats,
 } from './delivery.js';
+import { assertCapacity, consumeCapacity, releaseCapacity } from './partner-capacity.js';
+import { assertNotionalLimits } from './exposure.js';
+import { getPlatformParams } from './platform-config.js';
+import { suggestPresalePrice } from './index-engine.js';
+import { assertBuyingPower, postLedger } from './ledger.js';
 
 const CONFIRM_HOURS = 72;
 
@@ -91,7 +96,7 @@ export async function presentForward(row, { markToMarket = true, viewerUserId = 
     }
   }
   j.delivery_window_open =
-    canRequestDelivery(j) && isInDeliveryWindow(j.expiry_date);
+    canRequestDelivery(j) && (await isInDeliveryWindow(j.expiry_date));
   const spotOpen = Number(j.spot_ref_at_open);
   const strike = Number(j.strike_price);
   if (spotOpen > 0 && strike > 0) {
@@ -107,26 +112,12 @@ export async function presentForward(row, { markToMarket = true, viewerUserId = 
     j.vs_settle_pct =
       Math.round(((Number(j.mtm.settle_price) - strike) / Number(j.mtm.settle_price)) * 10000) / 100;
   }
-  try {
-    const { getPlatformParams } = await import('./platform-config.js');
-    const { addDaysShanghai, todayShanghai } = await import('../utils/market.js');
-    const params = await getPlatformParams();
-    const n = Number(params.intent_days_before_expiry || 7);
-    const today = todayShanghai();
-    const start = addDaysShanghai(j.expiry_date, -n);
-    j.intent_window_open =
-      j.status === 'open' && today >= start && today <= j.expiry_date;
-  } catch {
-    j.intent_window_open = false;
-  }
+  j.intent_window_open = j.status === 'open' && (await isInDeliveryWindow(j.expiry_date));
   return j;
 }
 
 /** 客户可见的预售挂牌（按活跃指数 + 建议预售价） */
 export async function listPresaleOffers() {
-  const { getPlatformParams } = await import('./platform-config.js');
-  const { suggestPresalePrice } = await import('./index-engine.js');
-  const { addMonthsShanghai, todayShanghai } = await import('../utils/market.js');
   const params = await getPlatformParams();
   const indices = await PriceIndex.findAll({
     where: { status: 'active' },
@@ -223,9 +214,6 @@ export async function createForward(body, brokerId) {
     throw new AppError('开仓默认现金结算，请到期前在窗口内申请实物交割');
   }
 
-  const { getPlatformParams } = await import('./platform-config.js');
-  const { suggestPresalePrice } = await import('./index-engine.js');
-  const { addMonthsShanghai, todayShanghai } = await import('../utils/market.js');
   const params = await getPlatformParams();
 
   // FRD 预售：默认固定 6 月交割；测试可用 tenor_months / 显式 expiry_date 覆盖
@@ -254,10 +242,7 @@ export async function createForward(body, brokerId) {
   const notional = x * Number(qty);
   const marginFrozen = Math.round(notional * (marginPct / 100) * 100) / 100;
 
-  const { assertBuyingPower, postLedger } = await import('./ledger.js');
   const { assertNotUnderMarginBlock } = await import('./margin-monitor.js');
-  const { assertCapacity, consumeCapacity } = await import('./partner-capacity.js');
-  const { assertNotionalLimits } = await import('./exposure.js');
   await assertNotUnderMarginBlock(buyer_id);
 
   return sequelize.transaction(async (t) => {
@@ -321,14 +306,12 @@ export async function setDeliveryIntent(contractId, userId, intent) {
   if (!contract) throw new AppError('合约不存在', 404);
   if (contract.status !== 'open') throw new AppError('仅持仓中可确认交割意愿');
   if (Number(userId) !== Number(contract.buyer_id)) throw new AppError('仅买方可确认意愿', 403);
-  const { getPlatformParams } = await import('./platform-config.js');
-  const { addDaysShanghai, todayShanghai } = await import('../utils/market.js');
-  const params = await getPlatformParams();
-  const n = Number(params.intent_days_before_expiry || 7);
-  const windowStart = addDaysShanghai(contract.expiry_date, -n);
-  const today = todayShanghai();
-  if (today < windowStart || today > contract.expiry_date) {
-    throw new AppError(`交割意愿确认窗口为到期前 ${n} 天至到期日（${windowStart} ~ ${contract.expiry_date}）`);
+  if (!(await isInDeliveryWindow(contract.expiry_date))) {
+    const n = await deliveryWindowDaysBefore();
+    const windowStart = addDaysShanghai(contract.expiry_date, -n);
+    throw new AppError(
+      `交割意愿确认窗口为到期前 ${n} 天至到期日（${windowStart} ~ ${contract.expiry_date}）`,
+    );
   }
   contract.delivery_intent = intent;
   await contract.save();
@@ -338,7 +321,6 @@ export async function setDeliveryIntent(contractId, userId, intent) {
 async function releaseForwardCapacityIfAny(contract, transaction) {
   const index = await PriceIndex.findByPk(contract.index_id, { transaction });
   if (!index?.sku_id) return;
-  const { releaseCapacity } = await import('./partner-capacity.js');
   await releaseCapacity(
     'forward',
     index.sku_id,
@@ -560,7 +542,7 @@ export async function listForwardsForUser(userId) {
 /** 单笔现金结算 */
 export async function settleOne(contractId, { asOf = todayShanghai() } = {}) {
   if (await shouldSkipCashSettle(contractId)) {
-    return { contract_id: Number(contractId), ok: false, reason: '已转实物交割或有进行中工单' };
+    return { contract_id: Number(contractId), ok: false, reason: '交割进行中或争议中，跳过现金结算' };
   }
 
   const result = await sequelize.transaction(async (t) => {
@@ -573,7 +555,7 @@ export async function settleOne(contractId, { asOf = todayShanghai() } = {}) {
     }
     if (locked.expiry_date > asOf) throw new AppError('未到期');
     if (await shouldSkipCashSettle(contractId)) {
-      throw new AppError('已转实物交割或有进行中工单');
+      throw new AppError('交割进行中或争议中，不可现金结算');
     }
 
     const print = await getLatestPublished(locked.index_id, locked.expiry_date);
@@ -634,6 +616,7 @@ export async function settleOne(contractId, { asOf = todayShanghai() } = {}) {
       locked.margin_frozen = keep;
     }
     await locked.save({ transaction: t });
+    await releaseForwardCapacityIfAny(locked, t);
     return { bill, ...settled };
   });
 

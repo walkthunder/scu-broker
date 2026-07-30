@@ -251,14 +251,17 @@ describe('页面接口补全', ({ it }) => {
         method: 'PUT',
         headers: auth(partner.token),
         body: {
-          spot_qty: row.spot_qty,
-          forward_qty: row.forward_qty,
-          rights_qty: row.rights_qty,
           quote_bid: 100000,
           quote_ask: 102000,
         },
       });
       assertOk(saved);
+      const badQty = await req(`/frd/partner/capacities/${row.id}`, {
+        method: 'PUT',
+        headers: auth(partner.token),
+        body: { spot_qty: 999999 },
+      });
+      assert(badQty.json?.code !== 0, '伙伴不可自改产能余量');
     }
     const skus = await req('/admin/skus', { headers: auth(adminTok) });
     const h100 = skus.json.data.find((s) => s.name === 'H100') || skus.json.data[0];

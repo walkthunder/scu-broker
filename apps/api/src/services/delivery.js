@@ -11,17 +11,14 @@ import {
 import { sequelize } from '../config/database.js';
 import { AppError } from '../utils/errors.js';
 import { todayShanghai } from '../utils/market.js';
-import {
-  isInDeliveryWindow,
-  DELIVERY_WINDOW_DAYS_BEFORE,
-} from './delivery-window.js';
+import { isInDeliveryWindow, deliveryWindowDaysBefore } from './delivery-window.js';
 import {
   assertForwardTransition,
   blocksCashSettle,
   canRequestDelivery,
 } from './forward-state.js';
 
-export { isInDeliveryWindow } from './delivery-window.js';
+export { isInDeliveryWindow, deliveryWindowDaysBefore } from './delivery-window.js';
 
 const orderInclude = [
   {
@@ -137,10 +134,9 @@ export async function requestDelivery(contractId, userId, { channel_id, note } =
     if (!(await isUserWhitelisted(uid))) {
       throw new AppError('账户未开通实物交割白名单', 403);
     }
-    if (!isInDeliveryWindow(contract.expiry_date)) {
-      throw new AppError(
-        `不在交割申请窗口内（到期日前 ${DELIVERY_WINDOW_DAYS_BEFORE} 天至到期日当日）`,
-      );
+    if (!(await isInDeliveryWindow(contract.expiry_date))) {
+      const n = await deliveryWindowDaysBefore();
+      throw new AppError(`不在交割申请窗口内（到期日前 ${n} 天至到期日当日）`);
     }
 
     const openReq = await DeliveryOrder.findOne({
@@ -518,7 +514,7 @@ export async function shouldSkipCashSettle(contractId) {
   const active = await DeliveryOrder.findOne({
     where: {
       contract_id: contractId,
-      status: { [Op.in]: ['pending', 'approved', 'in_delivery'] },
+      status: { [Op.in]: ['pending', 'approved', 'in_delivery', 'dispute'] },
     },
   });
   return !!active;

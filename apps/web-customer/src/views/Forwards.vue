@@ -115,7 +115,9 @@ function canConfirm(row) {
 }
 
 function hasActiveDelivery(row) {
-  return (row.delivery_orders || []).some((d) => ['pending', 'approved', 'done'].includes(d.status));
+  return (row.delivery_orders || []).some((d) =>
+    ['pending', 'approved', 'in_delivery', 'dispute'].includes(d.status),
+  );
 }
 
 function canRequestDelivery(row) {
@@ -131,7 +133,7 @@ function deliveryHint(row) {
   if (row.status !== 'open' || row.settle_mode === 'physical') return '';
   if (row.delivery_pending_review) return '';
   if (!whitelisted.value) return '未开通交割白名单';
-  if (!row.delivery_window_open) return '不在交割窗口（到期前7天～到期日）';
+  if (!row.delivery_window_open) return '不在交割窗口（到期前至到期日，窗口天数见平台配置）';
   if (hasActiveDelivery(row)) return '';
   return '';
 }

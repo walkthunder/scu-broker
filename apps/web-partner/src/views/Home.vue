@@ -49,14 +49,11 @@ async function saveCap(row) {
     await api(`/frd/partner/capacities/${row.id}`, {
       method: 'PUT',
       body: {
-        spot_qty: row.spot_qty,
-        forward_qty: row.forward_qty,
-        rights_qty: row.rights_qty,
         quote_bid: row.quote_bid,
         quote_ask: row.quote_ask,
       },
     });
-    ElMessage.success('产能/报价已更新');
+    ElMessage.success('报价已更新（产能余量由运营维护）');
   } catch (e) {
     ElMessage.error(e.message);
   }
@@ -103,25 +100,13 @@ onMounted(load);
     </div>
 
     <el-card shadow="never" style="margin-top: 20px">
-      <template #header>我的产能余量与双边报价（可直接改）</template>
+      <template #header>产能余量（只读）与双边报价</template>
       <el-table :data="caps" size="small">
         <el-table-column label="SKU" :formatter="(r) => r.sku?.name" />
         <el-table-column prop="region" label="区域" width="100" />
-        <el-table-column label="现货" width="120">
-          <template #default="{ row }">
-            <el-input-number v-model="row.spot_qty" :min="0" size="small" />
-          </template>
-        </el-table-column>
-        <el-table-column label="预售" width="120">
-          <template #default="{ row }">
-            <el-input-number v-model="row.forward_qty" :min="0" size="small" />
-          </template>
-        </el-table-column>
-        <el-table-column label="权益" width="120">
-          <template #default="{ row }">
-            <el-input-number v-model="row.rights_qty" :min="0" size="small" />
-          </template>
-        </el-table-column>
+        <el-table-column prop="spot_qty" label="现货余量" width="100" />
+        <el-table-column prop="forward_qty" label="预售余量" width="100" />
+        <el-table-column prop="rights_qty" label="权益余量" width="100" />
         <el-table-column label="Bid" width="120">
           <template #default="{ row }">
             <el-input-number v-model="row.quote_bid" :min="0" :precision="2" size="small" />
@@ -134,7 +119,7 @@ onMounted(load);
         </el-table-column>
         <el-table-column label="操作" width="90">
           <template #default="{ row }">
-            <el-button link type="primary" @click="saveCap(row)">保存</el-button>
+            <el-button link type="primary" @click="saveCap(row)">保存报价</el-button>
           </template>
         </el-table-column>
       </el-table>

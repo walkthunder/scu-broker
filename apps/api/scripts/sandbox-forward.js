@@ -32,9 +32,18 @@ async function customerLogin(email, password = 'Pass1234!') {
 }
 
 async function ensurePublished(token, indexId, settlePrice, preferredDate) {
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 40; i++) {
     const date = addDaysShanghai(preferredDate, -i);
     try {
+      // 已发布未入账则可先撤销再覆写；已用于结算则换日
+      try {
+        await api(`/admin/indices/${indexId}/prints/${date}/unpublish`, {
+          method: 'POST',
+          token,
+        });
+      } catch {
+        /* 无发布或已锁定：继续尝试写入 */
+      }
       await api(`/admin/indices/${indexId}/prints`, {
         method: 'POST',
         token,
@@ -46,7 +55,16 @@ async function ensurePublished(token, indexId, settlePrice, preferredDate) {
       });
       return date;
     } catch (e) {
-      if (!String(e.message).includes('已用于结算')) throw e;
+      const msg = String(e.message || '');
+      if (
+        msg.includes('已用于结算') ||
+        msg.includes('PRINT_LOCKED') ||
+        msg.includes('请先撤销') ||
+        msg.includes('禁止改价')
+      ) {
+        continue;
+      }
+      throw e;
     }
   }
   throw new Error('无法找到可写入的结算价日期');

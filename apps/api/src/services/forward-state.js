@@ -10,16 +10,6 @@ import { AppError } from '../utils/errors.js';
  *
  * settle_mode：开仓固定 cash；批准交割时改为 physical（与 status 同步，不单独驱动流转）。
  */
-export const FORWARD_STATUSES = [
-  'draft',
-  'pending_confirm',
-  'open',
-  'delivery_pending',
-  'settled',
-  'delivered',
-  'cancelled',
-];
-
 const ALLOWED = {
   pending_confirm: ['open', 'cancelled'],
   open: ['settled', 'delivery_pending', 'cancelled'],
@@ -37,11 +27,6 @@ export function assertForwardTransition(from, to) {
 /** 可申请实物交割 */
 export function canRequestDelivery(contract) {
   return contract?.status === 'open' && contract?.settle_mode !== 'physical';
-}
-
-/** 持仓中（含已批准待交割） */
-export function isActivePosition(status) {
-  return status === 'open' || status === 'delivery_pending';
 }
 
 /** 应跳过现金结算的终态/实物路径 */
