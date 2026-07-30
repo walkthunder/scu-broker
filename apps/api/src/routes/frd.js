@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { authRequired, requireRoles } from '../middleware/auth.js';
 import { ok, AppError } from '../utils/errors.js';
-import { REGIONS } from '../constants/platform.js';
+import { REGIONS, REGION_CODES } from '../constants/platform.js';
 import {
   createChannelDeal,
   voidChannelDeal,
@@ -569,6 +569,9 @@ router.post('/partner/channel-deals', ...partner, async (req, res, next) => {
 });
 
 // —— CRM ——
+const CRM_SOURCES = ['friend', 'partner', 'sales', 'event', 'other'];
+const CRM_STAGES = ['lead', 'qualified', 'negotiating', 'won', 'lost'];
+
 router.get('/crm/leads', ...staff, async (_req, res, next) => {
   try {
     ok(
@@ -577,7 +580,7 @@ router.get('/crm/leads', ...staff, async (_req, res, next) => {
         include: [
           { association: 'owner', attributes: ['id', 'name'] },
           { association: 'user', attributes: ['id', 'name', 'company_name'] },
-          { association: 'notes' },
+          { association: 'notes', separate: true, order: [['id', 'ASC']] },
         ],
         order: [['id', 'DESC']],
       }),
@@ -605,6 +608,15 @@ router.post('/crm/leads', ...staff, async (req, res, next) => {
     ]) {
       if (req.body[f] !== undefined) body[f] = req.body[f];
     }
+    if (body.source != null && !CRM_SOURCES.includes(body.source)) {
+      throw new AppError('客户来源无效');
+    }
+    if (body.stage != null && !CRM_STAGES.includes(body.stage)) {
+      throw new AppError('漏斗阶段无效');
+    }
+    if (body.intent_region != null && body.intent_region !== '' && !REGION_CODES.includes(body.intent_region)) {
+      throw new AppError('意向区域无效');
+    }
     body.owner_id = body.owner_id || req.user.id;
     ok(res, await CrmLead.create(body));
   } catch (e) {
@@ -614,12 +626,16 @@ router.post('/crm/leads', ...staff, async (req, res, next) => {
 
 router.post('/crm/leads/:id/notes', ...staff, async (req, res, next) => {
   try {
+    const lead = await CrmLead.findByPk(req.params.id);
+    if (!lead) throw new AppError('线索不存在', 404);
+    const content = String(req.body.content || '').trim();
+    if (!content) throw new AppError('跟进笔记不能为空');
     ok(
       res,
       await CrmNote.create({
-        lead_id: Number(req.params.id),
+        lead_id: lead.id,
         author_id: req.user.id,
-        content: req.body.content,
+        content,
       }),
     );
   } catch (e) {
@@ -645,6 +661,15 @@ router.put('/crm/leads/:id', ...staff, async (req, res, next) => {
       'owner_id',
     ]) {
       if (req.body[f] !== undefined) row[f] = req.body[f];
+    }
+    if (row.source != null && !CRM_SOURCES.includes(row.source)) {
+      throw new AppError('客户来源无效');
+    }
+    if (row.stage != null && !CRM_STAGES.includes(row.stage)) {
+      throw new AppError('漏斗阶段无效');
+    }
+    if (row.intent_region != null && row.intent_region !== '' && !REGION_CODES.includes(row.intent_region)) {
+      throw new AppError('意向区域无效');
     }
     await row.save();
     ok(res, row);
