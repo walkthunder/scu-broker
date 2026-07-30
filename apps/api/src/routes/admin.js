@@ -720,6 +720,28 @@ router.get('/deal-feeds', ...staff, async (req, res, next) => {
   }
 });
 
+router.post('/deal-feeds', ...staff, async (req, res, next) => {
+  try {
+    const { region, sku_name, deal_type, deal_date, publish } = req.body;
+    if (!region || !sku_name || !deal_type || !deal_date) {
+      throw new AppError('region、sku_name、deal_type、deal_date 必填');
+    }
+    const row = await DealFeed.create({
+      region: String(region).slice(0, 50),
+      sku_name: String(sku_name).slice(0, 100),
+      deal_type: String(deal_type).slice(0, 50),
+      deal_date,
+      order_id: null,
+      is_published: publish !== false,
+      published_by: req.user.id,
+      published_at: new Date(),
+    });
+    ok(res, row);
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.post('/deal-feeds/:id/publish', ...staff, async (req, res, next) => {
   try {
     const row = await DealFeed.findByPk(req.params.id);

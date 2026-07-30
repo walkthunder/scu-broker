@@ -497,8 +497,28 @@ async function downloadPng(){
 }
 
 export async function getNationalComposite(date = todayShanghai()) {
-  const bulletin = await PriceBulletin.findOne({ where: { date, status: 'published' } });
-  if (bulletin?.payload?.national) return bulletin.payload.national;
-  if (bulletin?.snapshot?.national) return bulletin.snapshot.national;
+  const bulletin = await PriceBulletin.findOne({
+    where: { status: 'published' },
+    order: [['date', 'DESC']],
+  });
+  if (!bulletin) return [];
+  let payload = bulletin.payload;
+  if (typeof payload === 'string') {
+    try {
+      payload = JSON.parse(payload);
+    } catch {
+      payload = null;
+    }
+  }
+  if (payload?.national?.length) return payload.national;
+  let snapshot = bulletin.snapshot;
+  if (typeof snapshot === 'string') {
+    try {
+      snapshot = JSON.parse(snapshot);
+    } catch {
+      snapshot = null;
+    }
+  }
+  if (snapshot?.national?.length) return snapshot.national;
   return [];
 }

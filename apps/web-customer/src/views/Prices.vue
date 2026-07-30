@@ -42,6 +42,27 @@ const syncAgeText = computed(() => {
   return `${Math.floor(sec / 60)} 分前同步`;
 });
 
+function bulletinLines(b) {
+  if (!b) return [];
+  let payload = b.payload;
+  let snapshot = b.snapshot;
+  if (typeof payload === 'string') {
+    try {
+      payload = JSON.parse(payload);
+    } catch {
+      payload = null;
+    }
+  }
+  if (typeof snapshot === 'string') {
+    try {
+      snapshot = JSON.parse(snapshot);
+    } catch {
+      snapshot = null;
+    }
+  }
+  return payload?.lines || snapshot?.lines || [];
+}
+
 const clockText = computed(() =>
   new Intl.DateTimeFormat('zh-CN', {
     timeZone: 'Asia/Shanghai',
@@ -213,7 +234,7 @@ function scrollToMarket() {
         <span class="font-medium text-amber-400">日价格公告 {{ bulletin.date }}</span>
         <span class="ml-2 text-slate-500">正式结算价</span>
         <span
-          v-for="line in (bulletin.payload?.lines || bulletin.snapshot?.lines || []).slice(0, 4)"
+          v-for="line in bulletinLines(bulletin).slice(0, 4)"
           :key="line.code"
           class="ml-3 font-mono text-xs text-slate-400"
         >

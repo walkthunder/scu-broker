@@ -176,51 +176,36 @@ async function seed() {
 
   const today = todayShanghai();
   const yesterday = addDaysShanghai(today, -1);
+  const {
+    MARKET_ANCHORS,
+    driftedMid,
+    bandFromMid,
+  } = await import('../src/services/ensure-market-day.js');
+
   const regions = ['shanghai', 'neimeng', 'guizhou'];
-  const frdAnchors = {
-    H100: 120000,
-    H200: 145000,
-    PPU: 53000,
-    '算力 Token': 2.05,
-  };
   for (const s of skus) {
-    const base =
-      frdAnchors[s.name] ??
-      (s.type === 'token' ? 8 : s.unit === '月' || s.unit === '台·月' ? 80000 : 25);
+    const base = MARKET_ANCHORS[s.name] ?? (s.type === 'token' ? 8 : 50000);
     for (const region of regions) {
-      const regional =
-        region === 'neimeng' ? base * 0.95 : region === 'guizhou' ? base * 0.92 : base;
-      await ReferencePrice.findOrCreate({
-        where: { sku_id: s.id, date: yesterday, region },
-        defaults: {
-          sku_id: s.id,
-          date: yesterday,
-          region,
-          price_low: regional * 0.75,
-          price_mid: regional * 0.95,
-          price_high: regional * 1.2,
-          source: '人工录入',
-          created_by: admin.id,
-        },
-      });
-      const [todayRef] = await ReferencePrice.findOrCreate({
-        where: { sku_id: s.id, date: today, region },
-        defaults: {
-          sku_id: s.id,
-          date: today,
-          region,
-          price_low: regional * 0.8,
-          price_mid: regional,
-          price_high: regional * 1.3,
-          source: '人工录入',
-          created_by: admin.id,
-        },
-      });
-      todayRef.price_low = regional * 0.8;
-      todayRef.price_mid = regional;
-      todayRef.price_high = regional * 1.3;
-      todayRef.source = '人工录入';
-      await todayRef.save();
+      for (const d of [yesterday, today]) {
+        const mid = driftedMid(base, d, s.name, region);
+        const band = bandFromMid(mid, s.type);
+        const [row] = await ReferencePrice.findOrCreate({
+          where: { sku_id: s.id, date: d, region },
+          defaults: {
+            sku_id: s.id,
+            date: d,
+            region,
+            ...band,
+            source: '人工录入',
+            created_by: admin.id,
+          },
+        });
+        if (!(Number(row.price_mid) > 0)) {
+          Object.assign(row, band);
+          row.source = '人工录入';
+          await row.save();
+        }
+      }
     }
   }
 
@@ -559,6 +544,13 @@ async function seed() {
       }
     }
   }
+
+  // 回填近 21 日曲线 + 当日公告/做市/成交动态（幂等）
+  const { backfillMarketHistory, ensureMarketDay } = await import(
+    '../src/services/ensure-market-day.js'
+  );
+  await backfillMarketHistory(21, today);
+  await ensureMarketDay(today);
 
   console.log('Seed done.');
   console.log(`Admin login: ${config.admin.phone} / ${config.admin.password}`);

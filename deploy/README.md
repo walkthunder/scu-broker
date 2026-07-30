@@ -44,6 +44,7 @@
 | `setup-db-env.sh` | 建库用户、写 `.env`、`npm install` |
 | `scu-api.service` | systemd 单元（MemoryMax=512M） |
 | `activate.sh` | 插入 Nginx 片段、seed、启 API |
+| API `npm run db:seed:market` | 幂等回填近 N 日参考价 + 当日公告/指数/做市（不重置账号） |
 
 ## 更新发布（简要）
 
@@ -63,6 +64,8 @@ rsync -az --exclude node_modules --exclude .env apps/api/ root@<host>:/opt/scu-b
 
 ```bash
 cd /opt/scu-broker/apps/api && npm install --omit=dev
+# 日切后若大厅空价：幂等补行情（不重置账号）
+npm run db:seed:market
 systemctl restart scu-api
 # Nginx 若仅改静态可不动；改 location 后: nginx -t && kill -HUP $(cat /run/nginx.pid)
 ```

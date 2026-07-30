@@ -322,6 +322,16 @@ async function start() {
   await ensureFrdPostSync();
   const { startFrdScheduler } = await import('./jobs/scheduler.js');
   startFrdScheduler();
+  // 日切后自动补齐今日行情，避免大厅空价
+  setTimeout(async () => {
+    try {
+      const { ensureMarketDay } = await import('./services/ensure-market-day.js');
+      const r = await ensureMarketDay();
+      console.log('[market-day]', JSON.stringify(r));
+    } catch (e) {
+      console.warn('[market-day]', e?.message || e);
+    }
+  }, 2_000);
   app.listen(config.port, () => {
     console.log(`CompriX API listening on :${config.port}`);
   });

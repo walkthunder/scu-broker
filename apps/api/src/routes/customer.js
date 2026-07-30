@@ -68,14 +68,34 @@ async function dealMaps() {
 }
 
 async function priceMapsFor(date) {
-  const yesterday = addDaysShanghai(date, -1);
-  const [todayRows, ydayRows] = await Promise.all([
-    ReferencePrice.findAll({ where: { date } }),
-    ReferencePrice.findAll({ where: { date: yesterday } }),
-  ]);
+  let asOf = date;
+  let todayRows = await ReferencePrice.findAll({ where: { date: asOf } });
+  // 日切后若今日尚未录入，回退到最近有价日（避免大厅全空）
+  if (!todayRows.length) {
+    const latest = await ReferencePrice.findOne({
+      attributes: ['date'],
+      order: [['date', 'DESC']],
+    });
+    if (latest?.date) {
+      asOf = latest.date;
+      todayRows = await ReferencePrice.findAll({ where: { date: asOf } });
+    }
+  }
+  const yesterday = addDaysShanghai(asOf, -1);
+  const ydayRows = await ReferencePrice.findAll({ where: { date: yesterday } });
+
+  function mapBySkuPreferShanghai(rows) {
+    const m = {};
+    for (const p of rows) {
+      if (!m[p.sku_id] || p.region === 'shanghai') m[p.sku_id] = p;
+    }
+    return m;
+  }
+
   return {
-    today: Object.fromEntries(todayRows.map((p) => [p.sku_id, p])),
-    yesterday: Object.fromEntries(ydayRows.map((p) => [p.sku_id, p])),
+    asOf,
+    today: mapBySkuPreferShanghai(todayRows),
+    yesterday: mapBySkuPreferShanghai(ydayRows),
   };
 }
 
@@ -132,19 +152,37 @@ router.get('/announcement', async (_req, res, next) => {
 router.get('/market-pulse', async (_req, res, next) => {
   try {
     const date = todayShanghai();
-    const priced = await ReferencePrice.count({ where: { date } });
+    let priced = await ReferencePrice.count({ where: { date } });
+    let priceAsOf = date;
+    if (!priced) {
+      const latest = await ReferencePrice.findOne({
+        attributes: ['date', 'updatedAt'],
+        order: [['date', 'DESC']],
+      });
+      if (latest?.date) {
+        priceAsOf = latest.date;
+        priced = await ReferencePrice.count({ where: { date: priceAsOf } });
+      }
+    }
     const pending = await Rfq.count({ where: { status: 'pending' } });
     const feedCount = await DealFeed.count({ where: { is_published: true } });
     const latestPrice = await ReferencePrice.findOne({
-      where: { date },
+      where: { date: priceAsOf },
       order: [['updatedAt', 'DESC']],
     });
     ok(res, {
-      price_as_of: date,
+      price_as_of: priceAsOf,
       priced_sku_count: priced,
       published_feed_count: feedCount,
       inquiry_active: pending > 0,
-      pulse_text: pending > 0 ? '询价活跃' : feedCount > 0 ? '成交动态更新中' : '行情已更新',
+      pulse_text:
+        pending > 0
+          ? '询价活跃'
+          : priced > 0
+            ? '行情已更新'
+            : feedCount > 0
+              ? '成交动态更新中'
+              : '行情准备中',
       sla_hint: '通常 2–6 小时反馈 · 正式报价 24 小时有效',
       server_time: new Date().toISOString(),
       last_price_touch: latestPrice?.updatedAt?.toISOString?.() || null,
@@ -175,11 +213,11 @@ router.get('/hot-skus', async (_req, res, next) => {
         limit: 6,
       }),
     );
-    const { today, yesterday } = await priceMapsFor(date);
+    const { today, yesterday, asOf } = await priceMapsFor(date);
     const deals = await dealMaps();
     ok(
       res,
-      skus.map((s) => presentSkuPrice(s, today, yesterday, deals, date)),
+      skus.map((s) => presentSkuPrice(s, today, yesterday, deals, asOf)),
     );
   } catch (e) {
     next(e);
@@ -198,11 +236,11 @@ router.get('/reference-prices', async (_req, res, next) => {
         ],
       }),
     );
-    const { today, yesterday } = await priceMapsFor(date);
+    const { today, yesterday, asOf } = await priceMapsFor(date);
     const deals = await dealMaps();
     ok(
       res,
-      skus.map((s) => presentSkuPrice(s, today, yesterday, deals, date)),
+      skus.map((s) => presentSkuPrice(s, today, yesterday, deals, asOf)),
     );
   } catch (e) {
     next(e);

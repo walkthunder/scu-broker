@@ -35,10 +35,17 @@ async function tick() {
     const targetHour = Number(params.publish_hour_shanghai ?? 17);
     const { hour, minute } = shanghaiHourMinute();
     const today = todayShanghai();
+    // 清晨补齐当日参考价/公告（幂等）
+    if (hour === 8 && minute < 5) {
+      const { ensureMarketDay } = await import('../services/ensure-market-day.js');
+      await ensureMarketDay(today);
+    }
     // 在目标小时的前 5 分钟窗口内触发一次发布预备 + 盯市/过期
     if (hour === targetHour && minute < 5 && lastPublishDate !== today) {
       lastPublishDate = today;
       const userId = await systemOperatorId();
+      const { ensureMarketDay } = await import('../services/ensure-market-day.js');
+      await ensureMarketDay(today);
       const result = await runDailyJobs({ date: today, settle: true, userId });
       console.log('[frd-scheduler] daily jobs', JSON.stringify({
         date: today,
@@ -57,6 +64,8 @@ export function startFrdScheduler() {
   // 启动后轻量跑一次过期清理（不强制结算/发布）
   setTimeout(async () => {
     try {
+      const { ensureMarketDay } = await import('../services/ensure-market-day.js');
+      await ensureMarketDay();
       await runExpireAll();
       await monitorForwardMargins();
     } catch (e) {

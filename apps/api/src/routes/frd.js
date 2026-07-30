@@ -200,12 +200,27 @@ router.post('/price-bulletins/:date/publish', ...staff, async (req, res, next) =
   }
 });
 
+function presentBulletin(row) {
+  if (!row) return null;
+  const j = typeof row.toJSON === 'function' ? row.toJSON() : { ...row };
+  for (const key of ['payload', 'snapshot']) {
+    if (typeof j[key] === 'string') {
+      try {
+        j[key] = JSON.parse(j[key]);
+      } catch {
+        /* keep string */
+      }
+    }
+  }
+  return j;
+}
+
 router.get('/price-bulletins', ...staff, async (req, res, next) => {
   try {
     const where = {};
     if (req.query.status) where.status = req.query.status;
     const list = await PB.findAll({ where, order: [['date', 'DESC']], limit: 60 });
-    ok(res, list);
+    ok(res, list.map(presentBulletin));
   } catch (e) {
     next(e);
   }
@@ -214,7 +229,7 @@ router.get('/price-bulletins', ...staff, async (req, res, next) => {
 router.get('/price-bulletins/latest', async (_req, res, next) => {
   try {
     const row = await PB.findOne({ where: { status: 'published' }, order: [['date', 'DESC']] });
-    ok(res, row);
+    ok(res, presentBulletin(row));
   } catch (e) {
     next(e);
   }
@@ -849,6 +864,21 @@ router.post('/jobs/expire-all', ...staff, async (_req, res, next) => {
 router.post('/jobs/daily-run', ...staff, requireRoles('admin'), async (req, res, next) => {
   try {
     ok(res, await runDailyJobs({ date: req.body.date || todayShanghai(), userId: req.user.id }));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** 幂等补齐今日行情（参考价/指数打印/公告/做市/成交动态） */
+router.post('/jobs/ensure-market', ...staff, requireRoles('admin'), async (req, res, next) => {
+  try {
+    const { ensureMarketDay, backfillMarketHistory } = await import(
+      '../services/ensure-market-day.js'
+    );
+    const date = req.body.date || todayShanghai();
+    const days = Number(req.body.history_days || 0);
+    const hist = days > 0 ? await backfillMarketHistory(days, date) : null;
+    ok(res, { hist, day: await ensureMarketDay(date) });
   } catch (e) {
     next(e);
   }
