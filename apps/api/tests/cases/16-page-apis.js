@@ -4,7 +4,7 @@
  */
 import { describe } from '../lib/runner.js';
 import { req } from '../lib/http.js';
-import { assert, assertOk } from '../lib/assert.js';
+import { assert, assertOk, assertEq, assertFail } from '../lib/assert.js';
 import { adminLogin, customerLogin, auth } from '../lib/auth.js';
 import { todayShanghai } from '../../src/utils/market.js';
 
@@ -310,25 +310,65 @@ describe('页面接口补全', ({ it }) => {
       body: {
         company_name: `线索${Date.now()}`,
         contact_name: '测试',
+        phone: '13800138000',
         stage: 'lead',
-        source: 'other',
+        source: 'sales',
+        intent_sku: 'H100',
+        intent_region: 'shanghai',
+        note: '初始备注',
       },
     });
     assertOk(created);
+    assertEq(created.json.data.source, 'sales');
+    assertEq(created.json.data.stage, 'lead');
+    const badSource = await req('/frd/crm/leads', {
+      method: 'POST',
+      headers: auth(adminTok),
+      body: { company_name: 'bad', source: 'invalid_src' },
+    });
+    assertFail(badSource);
     const list = await req('/frd/crm/leads', { headers: auth(adminTok) });
     assertOk(list);
-    assert(list.json.data.some((l) => l.id === created.json.data.id));
+    const row = list.json.data.find((l) => l.id === created.json.data.id);
+    assert(row);
+    assert(Array.isArray(row.notes));
+    const emptyNote = await req(`/frd/crm/leads/${created.json.data.id}/notes`, {
+      method: 'POST',
+      headers: auth(adminTok),
+      body: { content: '   ' },
+    });
+    assertFail(emptyNote);
     const note = await req(`/frd/crm/leads/${created.json.data.id}/notes`, {
       method: 'POST',
       headers: auth(adminTok),
       body: { content: 'page-api note' },
     });
     assertOk(note);
+    const note2 = await req(`/frd/crm/leads/${created.json.data.id}/notes`, {
+      method: 'POST',
+      headers: auth(adminTok),
+      body: { content: 'second note' },
+    });
+    assertOk(note2);
+    const list2 = await req('/frd/crm/leads', { headers: auth(adminTok) });
+    assertOk(list2);
+    const withNotes = list2.json.data.find((l) => l.id === created.json.data.id);
+    assert(withNotes.notes.length >= 2);
+    assertEq(withNotes.notes[0].content, 'page-api note');
+    assertEq(withNotes.notes[withNotes.notes.length - 1].content, 'second note');
     const upd = await req(`/frd/crm/leads/${created.json.data.id}`, {
       method: 'PUT',
       headers: auth(adminTok),
-      body: { stage: 'qualified' },
+      body: { stage: 'qualified', source: 'partner' },
     });
     assertOk(upd);
+    assertEq(upd.json.data.stage, 'qualified');
+    assertEq(upd.json.data.source, 'partner');
+    const missingLeadNote = await req('/frd/crm/leads/99999999/notes', {
+      method: 'POST',
+      headers: auth(adminTok),
+      body: { content: 'orphan' },
+    });
+    assertEq(missingLeadNote.status, 404);
   });
 });
