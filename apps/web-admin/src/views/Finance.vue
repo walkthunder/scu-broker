@@ -18,6 +18,11 @@ const deposit = reactive({
   amount: 100000,
   note: '运营入金',
 });
+const withdraw = reactive({
+  user_id: null,
+  amount: 10000,
+  note: '运营出金',
+});
 const ledgerPreview = ref(null);
 
 async function load() {
@@ -47,12 +52,13 @@ async function save() {
 }
 
 async function loadLedger() {
-  if (!deposit.user_id) {
+  const uid = deposit.user_id || withdraw.user_id;
+  if (!uid) {
     ledgerPreview.value = null;
     return;
   }
   try {
-    ledgerPreview.value = (await api(`/frd/ledger/${deposit.user_id}`)).data;
+    ledgerPreview.value = (await api(`/frd/ledger/${uid}`)).data;
   } catch (e) {
     ledgerPreview.value = null;
     ElMessage.error(e.message);
@@ -74,6 +80,29 @@ async function doDeposit() {
       },
     });
     ElMessage.success('入金成功（FRD 账本）');
+    withdraw.user_id = deposit.user_id;
+    await loadLedger();
+  } catch (e) {
+    ElMessage.error(e.message);
+  }
+}
+
+async function doWithdraw() {
+  try {
+    if (!withdraw.user_id || !(withdraw.amount > 0)) {
+      ElMessage.warning('请选择客户并填写出金金额');
+      return;
+    }
+    await api('/frd/ledger/withdraw', {
+      method: 'POST',
+      body: {
+        user_id: withdraw.user_id,
+        amount: withdraw.amount,
+        note: withdraw.note,
+      },
+    });
+    ElMessage.success('出金成功（扣减可用余额）');
+    deposit.user_id = withdraw.user_id;
     await loadLedger();
   } catch (e) {
     ElMessage.error(e.message);
@@ -85,11 +114,11 @@ async function doDeposit() {
   <div>
     <div class="page-head">
       <h2>财务管理</h2>
-      <p class="page-desc">RFQ 订单收付款 · FRD 衍生品账本入金（挂单/预售/权益资金）</p>
+      <p class="page-desc">RFQ 订单收付款 · FRD 衍生品账本入金/出金（挂单/预售/权益资金）</p>
     </div>
 
     <el-card shadow="never" style="margin-bottom: 16px">
-      <template #header>FRD 账本入金</template>
+      <template #header>FRD 账本入金 / 出金</template>
       <el-form inline>
         <el-form-item label="客户">
           <el-select
@@ -97,7 +126,12 @@ async function doDeposit() {
             filterable
             style="width: 220px"
             placeholder="选择客户"
-            @change="loadLedger"
+            @change="
+              () => {
+                withdraw.user_id = deposit.user_id;
+                loadLedger();
+              }
+            "
           >
             <el-option
               v-for="c in customers"
@@ -107,11 +141,18 @@ async function doDeposit() {
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="金额">
+        <el-form-item label="入金">
           <el-input-number v-model="deposit.amount" :min="1" :precision="2" />
         </el-form-item>
-        <el-form-item label="备注"><el-input v-model="deposit.note" style="width: 160px" /></el-form-item>
+        <el-form-item label="备注"><el-input v-model="deposit.note" style="width: 140px" /></el-form-item>
         <el-button type="primary" @click="doDeposit">入金</el-button>
+      </el-form>
+      <el-form inline style="margin-top: 8px">
+        <el-form-item label="出金">
+          <el-input-number v-model="withdraw.amount" :min="1" :precision="2" />
+        </el-form-item>
+        <el-form-item label="备注"><el-input v-model="withdraw.note" style="width: 140px" /></el-form-item>
+        <el-button type="warning" @click="doWithdraw">出金</el-button>
       </el-form>
       <p v-if="ledgerPreview" style="margin: 8px 0 0; color: var(--el-text-color-secondary); font-size: 13px">
         可用 {{ Number(ledgerPreview.available || 0).toLocaleString() }} · 冻结

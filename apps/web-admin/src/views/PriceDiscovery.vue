@@ -25,6 +25,14 @@ const configEdit = reactive({});
 const csvText = ref('');
 const skus = ref([]);
 const loading = ref(false);
+const makerQuotes = ref([]);
+const mq = reactive({
+  sku_id: null,
+  region: 'shanghai',
+  bid: 0,
+  ask: 0,
+  note: '',
+});
 
 async function load() {
   loading.value = true;
@@ -34,9 +42,11 @@ async function load() {
     deals.value = (await api('/frd/channel-deals')).data || [];
     bulletins.value = (await api('/frd/price-bulletins')).data || [];
     config.value = (await api('/frd/platform-config')).data || {};
+    makerQuotes.value = (await api('/frd/maker-quotes')).data || [];
     Object.assign(configEdit, config.value);
     if (!form.sku_id && skus.value[0]) form.sku_id = skus.value[0].id;
     if (!curveQ.sku_id && skus.value[0]) curveQ.sku_id = skus.value[0].id;
+    if (!mq.sku_id && skus.value[0]) mq.sku_id = skus.value[0].id;
   } catch (e) {
     ElMessage.error(e.message);
   } finally {
@@ -163,6 +173,48 @@ async function publish(date) {
   try {
     await api(`/frd/price-bulletins/${date}/publish`, { method: 'POST' });
     ElMessage.success('已发布');
+    load();
+  } catch (e) {
+    ElMessage.error(e.message);
+  }
+}
+
+async function openExport(date) {
+  try {
+    const base = import.meta.env.VITE_API_BASE || '/api';
+    const res = await fetch(`${base}/frd/price-bulletins/${date}/export.html`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    });
+    if (!res.ok) throw new Error('导出失败');
+    const html = await res.text();
+    const w = window.open('', '_blank');
+    if (!w) {
+      ElMessage.warning('请允许弹窗以打开公告素材');
+      return;
+    }
+    w.document.write(html);
+    w.document.close();
+  } catch (e) {
+    ElMessage.error(e.message);
+  }
+}
+
+async function saveMakerQuote() {
+  try {
+    await api('/frd/maker-quotes', { method: 'POST', body: { ...mq } });
+    ElMessage.success('做市报价已录入（样本不足时可插值）');
+    mq.bid = 0;
+    mq.ask = 0;
+    load();
+  } catch (e) {
+    ElMessage.error(e.message);
+  }
+}
+
+async function removeMakerQuote(id) {
+  try {
+    await api(`/frd/maker-quotes/${id}`, { method: 'DELETE' });
+    ElMessage.success('已删除');
     load();
   } catch (e) {
     ElMessage.error(e.message);
@@ -314,6 +366,37 @@ onMounted(load);
                 >
                   复核发布
                 </el-button>
+                <el-button link type="primary" @click="openExport(row.date)">导出 PDF/图</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-card>
+        <el-card shadow="never" style="margin-top: 16px">
+          <template #header>做市双边参考报价</template>
+          <el-form inline size="small">
+            <el-form-item label="SKU">
+              <el-select v-model="mq.sku_id" style="width: 140px">
+                <el-option v-for="s in skus" :key="s.id" :label="s.name" :value="s.id" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="区域">
+              <el-select v-model="mq.region" style="width: 110px">
+                <el-option v-for="r in regions" :key="r.code" :label="r.name" :value="r.code" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="Bid"><el-input-number v-model="mq.bid" :min="0" :precision="2" /></el-form-item>
+            <el-form-item label="Ask"><el-input-number v-model="mq.ask" :min="0" :precision="2" /></el-form-item>
+            <el-button type="primary" @click="saveMakerQuote">录入</el-button>
+          </el-form>
+          <el-table :data="makerQuotes.slice(0, 20)" size="small" style="margin-top: 8px">
+            <el-table-column prop="date" width="110" />
+            <el-table-column prop="sku_id" label="SKU" width="70" />
+            <el-table-column prop="region" width="100" />
+            <el-table-column prop="bid" />
+            <el-table-column prop="ask" />
+            <el-table-column label="操作" width="80">
+              <template #default="{ row }">
+                <el-button link type="danger" @click="removeMakerQuote(row.id)">删</el-button>
               </template>
             </el-table-column>
           </el-table>

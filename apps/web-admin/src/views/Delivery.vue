@@ -25,6 +25,7 @@ const orderStatusLabel = {
   reconciled: '已对账',
   rejected: '已驳回',
   cancelled: '已取消',
+  dispute: '争议中',
 };
 
 async function load() {
@@ -188,6 +189,20 @@ async function markDefault(row) {
   }
 }
 
+async function markDispute(row) {
+  try {
+    const reason = window.prompt('争议说明', '交割数量/时间争议') || '交割争议';
+    await api(`/admin/delivery-orders/${row.id}/dispute`, {
+      method: 'POST',
+      body: { reason },
+    });
+    ElMessage.success('已标记争议，待人工裁定');
+    await load();
+  } catch (e) {
+    ElMessage.error(e.message);
+  }
+}
+
 const userLabel = (u) =>
   u ? `${u.company_name || u.name || '用户'} (#${u.id})` : '';
 </script>
@@ -235,6 +250,12 @@ const userLabel = (u) =>
               link
               @click="reconcile(row)"
             >对账</el-button>
+            <el-button
+              v-if="!['reconciled', 'rejected', 'done', 'dispute'].includes(row.status)"
+              link
+              type="warning"
+              @click="markDispute(row)"
+            >争议</el-button>
             <el-button
               v-if="isAdmin && !['reconciled', 'rejected'].includes(row.status)"
               link

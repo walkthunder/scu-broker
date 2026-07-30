@@ -249,10 +249,25 @@ async function ensureFrdColumns() {
     'spot_fill_id',
     '`spot_fill_id` INT UNSIGNED NULL',
   );
+  await ensureColumn(
+    'partner_capacities',
+    'quote_bid',
+    '`quote_bid` DECIMAL(14,4) NULL',
+  );
+  await ensureColumn(
+    'partner_capacities',
+    'quote_ask',
+    '`quote_ask` DECIMAL(14,4) NULL',
+  );
   await ensureModifyColumn(
     'delivery_orders',
     'status',
-    "`status` ENUM('pending','approved','in_delivery','done','rejected','reconciled') NOT NULL DEFAULT 'pending'",
+    "`status` ENUM('pending','approved','in_delivery','done','rejected','reconciled','dispute') NOT NULL DEFAULT 'pending'",
+  );
+  await ensureModifyColumn(
+    'ledger_entries',
+    'type',
+    "`type` ENUM('deposit','withdraw','margin_freeze','margin_release','premium','settle','payout','penalty','partner_pay') NOT NULL",
   );
 }
 

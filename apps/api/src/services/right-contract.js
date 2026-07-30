@@ -9,13 +9,14 @@ import { todayShanghai, addDaysShanghai } from '../utils/market.js';
 import { REGION_CODES } from '../constants/platform.js';
 import { sequelize } from '../config/database.js';
 
-/** 简化权利金参考：premium ≈ 0.4 * S * σ * sqrt(T/365) * qty 调整 + 内在价值 */
+/** 权利金参考（简化 BS 风格）：内在价值 + 时间价值；对外展示 IV≈σ、TV */
 export function refPremium({ spot, strike, kind, days, vol, qty }) {
   const S = Number(spot);
   const K = Number(strike);
   const T = Math.max(1, Number(days)) / 365;
   const sigma = Number(vol) || 0.35;
-  const timeValue = 0.4 * S * sigma * Math.sqrt(T);
+  const moneyness = K > 0 ? S / K : 1;
+  const timeValue = 0.4 * S * sigma * Math.sqrt(T) * (0.85 + 0.15 * Math.min(moneyness, 2));
   let intrinsic = 0;
   if (kind === 'call') intrinsic = Math.max(0, S - K);
   else intrinsic = Math.max(0, K - S);
@@ -27,6 +28,9 @@ export function refPremium({ spot, strike, kind, days, vol, qty }) {
     delta: deltaApprox,
     intrinsic: Math.round(intrinsic * 100) / 100,
     time_value: Math.round(timeValue * 100) / 100,
+    iv: Math.round(sigma * 10000) / 100,
+    tv: Math.round(timeValue * 100) / 100,
+    model: 'approx_bs',
   };
 }
 
@@ -110,9 +114,15 @@ export async function createRight(body, brokerId) {
 
   const { assertCapacity, consumeCapacity } = await import('./partner-capacity.js');
   const { assertNotUnderMarginBlock } = await import('./margin-monitor.js');
+  const { assertNotionalLimits } = await import('./exposure.js');
   await assertNotUnderMarginBlock(buyer_id);
 
   return sequelize.transaction(async (t) => {
+    await assertNotionalLimits(
+      buyer_id,
+      Number(premium) + Number(strike) * Number(qty) * 0.1,
+      t,
+    );
     await assertCapacity('rights', sku_id, region, qty, t);
     await consumeCapacity('rights', sku_id, region, qty, t);
     return RightContract.create(
@@ -180,19 +190,27 @@ export async function confirmRightFee(id, operatorId) {
 
 export async function presentRight(row) {
   const j = typeof row.toJSON === 'function' ? row.toJSON() : { ...row };
+  const params = await getPlatformParams();
   const spot = await latestSpotForSkuRegion(j.sku_id, j.region);
   const unitPrem = Number(j.premium) / Math.max(Number(j.qty), 1e-9);
+  const daysLeft = Math.max(
+    1,
+    Math.ceil(
+      (new Date(j.window_end).getTime() - Date.now()) / (86400 * 1000),
+    ) || Number(params.right_days),
+  );
   const ref = refPremium({
     spot: spot || j.strike,
     strike: j.strike,
     kind: j.kind,
-    days: 30,
-    vol: 0.35,
+    days: daysLeft,
+    vol: params.vol_for_premium,
     qty: j.qty,
   });
   j.analytics = {
     spot,
     ...ref,
+    days_left: daysLeft,
     payoff: payoffDiagram({
       kind: j.kind,
       strike: Number(j.strike),
@@ -202,6 +220,49 @@ export async function presentRight(row) {
     }),
   };
   return j;
+}
+
+/** 客户自助买入权益（权利金默认取参考价） */
+export async function selfOpenRight(buyerId, body) {
+  const params = await getPlatformParams();
+  if (!Number(params.rights_enabled)) throw new AppError('权益产品暂未开放', 403);
+  const {
+    kind,
+    sku_id,
+    region,
+    qty,
+    strike,
+    premium,
+    window_start,
+    window_end,
+    note,
+  } = body;
+  if (!['call', 'put'].includes(kind)) throw new AppError('kind 须为 call 或 put');
+  if (!sku_id || !region || !qty || !strike) throw new AppError('缺少必要字段');
+  const spot = (await latestSpotForSkuRegion(sku_id, region)) || Number(strike);
+  const ref = refPremium({
+    spot,
+    strike: Number(strike),
+    kind,
+    days: params.right_days,
+    vol: params.vol_for_premium,
+    qty: Number(qty),
+  });
+  return createRight(
+    {
+      kind,
+      buyer_id: buyerId,
+      sku_id,
+      region,
+      qty,
+      strike,
+      premium: premium != null ? Number(premium) : ref.premium_ref,
+      window_start,
+      window_end,
+      note: note || '客户自助买入权益',
+    },
+    null,
+  );
 }
 
 export async function exerciseRight(id, userId, { channel_id } = {}) {
@@ -303,10 +364,24 @@ export async function exerciseRight(id, userId, { channel_id } = {}) {
 }
 
 export async function expireRights(asOf = todayShanghai()) {
-  const [n] = await RightContract.update(
-    { status: 'expired' },
-    { where: { status: 'open', window_end: { [Op.lt]: asOf } } },
-  );
+  const rows = await RightContract.findAll({
+    where: { status: 'open', window_end: { [Op.lt]: asOf } },
+  });
+  let n = 0;
+  for (const row of rows) {
+    await sequelize.transaction(async (t) => {
+      const locked = await RightContract.findByPk(row.id, {
+        transaction: t,
+        lock: t.LOCK.UPDATE,
+      });
+      if (!locked || locked.status !== 'open') return;
+      locked.status = 'expired';
+      await locked.save({ transaction: t });
+      const { releaseCapacity } = await import('./partner-capacity.js');
+      await releaseCapacity('rights', locked.sku_id, locked.region, locked.qty, t);
+      n += 1;
+    });
+  }
   return n;
 }
 

@@ -8,11 +8,11 @@ import { postLedger } from './ledger.js';
 import { sequelize } from '../config/database.js';
 import { REGION_CODES } from '../constants/platform.js';
 import { assertCapacity, consumeCapacity } from './partner-capacity.js';
+import { assertNotionalLimits } from './exposure.js';
 
 async function marginFor(price, qty) {
-  const params = await getPlatformParams();
-  const pct = Number(params.margin_initial_pct) / 100;
-  return Math.round(Number(price) * Number(qty) * pct * 100) / 100;
+  // 现货挂单按全额名义冻结（钱在内），成交后全额划转
+  return Math.round(Number(price) * Number(qty) * 100) / 100;
 }
 
 function bumpAvg(prevAvg, prevFilled, fillPx, fillQty) {
@@ -159,24 +159,51 @@ async function matchOrder(order, transaction) {
 
     await consumeCapacity('spot', order.sku_id, order.region, qty, transaction);
 
-    // 买方成交：冻结保证金转为扣款（按成交价计，避免市价 0 漏扣）
+    // 买方：按成交价扣款；限价单若成交价更优，释放多冻的差额
     const fillMarginBase = Number(px) > 0 ? px : Number(buy.price);
-    if (Number(fillMarginBase) > 0) {
-      const m = await marginFor(fillMarginBase, qty);
-      if (m > 0) {
-        await postLedger(
-          {
-            userId: buy.user_id,
-            type: 'margin_release',
-            amount: m,
-            ref_type: 'spot_fill',
-            ref_id: fill.id,
-            note: '现货成交释放并扣减保证金占用',
-            mode: 'unfreeze_debit',
-          },
-          transaction,
-        );
-      }
+    const notional = Math.round(Number(fillMarginBase) * Number(qty) * 100) / 100;
+    const frozenUnit = Number(buy.price) > 0 ? Number(buy.price) : fillMarginBase;
+    const frozenForFill = Math.round(frozenUnit * Number(qty) * 100) / 100;
+    if (notional > 0) {
+      await postLedger(
+        {
+          userId: buy.user_id,
+          type: 'margin_release',
+          amount: notional,
+          ref_type: 'spot_fill',
+          ref_id: fill.id,
+          note: '现货成交全额扣款',
+          mode: 'unfreeze_debit',
+        },
+        transaction,
+      );
+      await postLedger(
+        {
+          userId: sell.user_id,
+          type: 'settle',
+          amount: notional,
+          ref_type: 'spot_fill',
+          ref_id: fill.id,
+          note: '现货成交卖方入账',
+          mode: 'available',
+        },
+        transaction,
+      );
+    }
+    const excessFreeze = Math.round((frozenForFill - notional) * 100) / 100;
+    if (excessFreeze > 1e-9) {
+      await postLedger(
+        {
+          userId: buy.user_id,
+          type: 'margin_release',
+          amount: excessFreeze,
+          ref_type: 'spot_fill',
+          ref_id: fill.id,
+          note: '现货成交价差释放多余冻结',
+          mode: 'release',
+        },
+        transaction,
+      );
     }
 
     await createChannelDeal(
@@ -247,6 +274,9 @@ export async function placeSpotOrder(userId, body) {
     if (side === 'sell') {
       await assertCapacity('spot', sku_id, region, qty, t);
     }
+    if (side === 'buy' && bookPrice > 0) {
+      await assertNotionalLimits(userId, bookPrice * Number(qty), t);
+    }
 
     const order = await SpotBookOrder.create(
       {
@@ -270,7 +300,7 @@ export async function placeSpotOrder(userId, body) {
           amount: need,
           ref_type: 'spot_book',
           ref_id: order.id,
-          note: '现货挂单保证金冻结',
+          note: '现货挂单全额冻结',
           mode: 'freeze',
         },
         t,

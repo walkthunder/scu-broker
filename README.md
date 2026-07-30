@@ -5,6 +5,8 @@
 | 文档 | 用途 |
 |------|------|
 | **[docs/产品设计与需求.md](docs/产品设计与需求.md)** | **唯一**设计目标与需求（含规则与验收） |
+| **[docs/交付功能说明.md](docs/交付功能说明.md)** | 面向需求方的完整交付功能介绍（对照 FRD） |
+| **[docs/测试说明.md](docs/测试说明.md)** | 三端页面接口覆盖矩阵、缺口与跑测方式 |
 | [deploy/README.md](deploy/README.md) | 生产部署、访问地址、脚本 |
 | [docs/TEAM_STANDARDS.md](docs/TEAM_STANDARDS.md) | 提交与扫描规范 |
 
@@ -86,7 +88,7 @@ cd apps/web-partner && npm install && npm run dev
 - **客户**：行情、询价成交、指数、远期/预售、权益、控制台、交割意愿  
 - **后台**：价格引擎双人发布、挂单/RFQ、远期结算、权益、交割、CRM、风控作业  
 - **伙伴**：入驻、产能、渠道成交、凭证  
-- **测试**：`npm test` / `apps/api` 功能套件；沙盘 `npm run sandbox:forward`
+- **测试**：`npm test` / 页面接口矩阵见 [docs/测试说明.md](docs/测试说明.md)；沙盘 `npm run sandbox:forward`
 
 ## 功能测试
 
@@ -94,6 +96,8 @@ cd apps/web-partner && npm install && npm run dev
 cd apps/api && npm run db:seed && npm run test:functional
 # 或仓库根目录: npm test
 ```
+
+覆盖矩阵与缺口：[docs/测试说明.md](docs/测试说明.md)。
 
 ## Docker 一键（本地）
 

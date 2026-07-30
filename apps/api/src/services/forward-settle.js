@@ -92,6 +92,21 @@ export async function presentForward(row, { markToMarket = true, viewerUserId = 
   }
   j.delivery_window_open =
     canRequestDelivery(j) && isInDeliveryWindow(j.expiry_date);
+  const spotOpen = Number(j.spot_ref_at_open);
+  const strike = Number(j.strike_price);
+  if (spotOpen > 0 && strike > 0) {
+    j.discount_pct = Math.round(((spotOpen - strike) / spotOpen) * 10000) / 100;
+    j.discount_label =
+      j.discount_pct > 0
+        ? `相对开仓现货折让约 ${j.discount_pct}%`
+        : j.discount_pct < 0
+          ? `相对开仓现货溢价约 ${Math.abs(j.discount_pct)}%`
+          : '与开仓现货持平';
+  }
+  if (j.mtm?.settle_price > 0 && strike > 0) {
+    j.vs_settle_pct =
+      Math.round(((Number(j.mtm.settle_price) - strike) / Number(j.mtm.settle_price)) * 10000) / 100;
+  }
   try {
     const { getPlatformParams } = await import('./platform-config.js');
     const { addDaysShanghai, todayShanghai } = await import('../utils/market.js');
@@ -105,6 +120,69 @@ export async function presentForward(row, { markToMarket = true, viewerUserId = 
     j.intent_window_open = false;
   }
   return j;
+}
+
+/** 客户可见的预售挂牌（按活跃指数 + 建议预售价） */
+export async function listPresaleOffers() {
+  const { getPlatformParams } = await import('./platform-config.js');
+  const { suggestPresalePrice } = await import('./index-engine.js');
+  const { addMonthsShanghai, todayShanghai } = await import('../utils/market.js');
+  const params = await getPlatformParams();
+  const indices = await PriceIndex.findAll({
+    where: { status: 'active' },
+    include: [{ association: 'sku', attributes: ['id', 'name', 'unit'] }],
+    order: [['id', 'ASC']],
+  });
+  const out = [];
+  for (const idx of indices) {
+    const print = await getLatestPublished(idx.id);
+    if (!print) continue;
+    const spot = Number(print.settle_price);
+    const band = suggestPresalePrice(spot, params);
+    const months = Number(params.presale_months) || 6;
+    out.push({
+      index_id: idx.id,
+      code: idx.code,
+      region: idx.region,
+      sku: idx.sku,
+      spot_settle: spot,
+      spot_date: print.date,
+      strike_suggest: band.mid,
+      strike_low: band.low,
+      strike_high: band.high,
+      basis_pct: band.basis_pct,
+      discount_pct: Math.round(((spot - band.mid) / spot) * 10000) / 100,
+      expiry_suggest: addMonthsShanghai(todayShanghai(), months),
+      tenor_months: months,
+      unit: idx.sku?.unit || '台·月',
+    });
+  }
+  return out;
+}
+
+async function resolveDefaultSellerId() {
+  const email = process.env.DEFAULT_FORWARD_SELLER_EMAIL || 'seller@comprix.local';
+  const seller = await User.findOne({ where: { email } });
+  if (!seller) throw new AppError('默认对手方未配置，请联系运营', 503);
+  return seller.id;
+}
+
+/** 客户自助买入预售（对手方固定为平台默认卖方，忽略客户端传入的 seller_id） */
+export async function selfOpenForward(buyerId, body) {
+  const seller_id = await resolveDefaultSellerId();
+  if (Number(seller_id) === Number(buyerId)) {
+    throw new AppError('默认对手方未配置或与买方相同，请联系运营', 503);
+  }
+  return createForward(
+    {
+      ...body,
+      buyer_id: buyerId,
+      seller_id,
+      presale: true,
+      note: body.note || '客户自助预售',
+    },
+    null,
+  );
 }
 
 export async function createForward(body, brokerId) {
@@ -179,9 +257,11 @@ export async function createForward(body, brokerId) {
   const { assertBuyingPower, postLedger } = await import('./ledger.js');
   const { assertNotUnderMarginBlock } = await import('./margin-monitor.js');
   const { assertCapacity, consumeCapacity } = await import('./partner-capacity.js');
+  const { assertNotionalLimits } = await import('./exposure.js');
   await assertNotUnderMarginBlock(buyer_id);
 
   return sequelize.transaction(async (t) => {
+    await assertNotionalLimits(buyer_id, notional, t);
     await assertBuyingPower(buyer_id, marginFrozen, t);
     if (index.sku_id) {
       await assertCapacity('forward', index.sku_id, reg, qty, t);
@@ -255,6 +335,19 @@ export async function setDeliveryIntent(contractId, userId, intent) {
   return presentForward(contract, { viewerUserId: userId });
 }
 
+async function releaseForwardCapacityIfAny(contract, transaction) {
+  const index = await PriceIndex.findByPk(contract.index_id, { transaction });
+  if (!index?.sku_id) return;
+  const { releaseCapacity } = await import('./partner-capacity.js');
+  await releaseCapacity(
+    'forward',
+    index.sku_id,
+    contract.region || index.region || 'shanghai',
+    contract.qty,
+    transaction,
+  );
+}
+
 async function tryOpen(contract, transaction) {
   if (contract.buyer_confirmed_at && contract.seller_confirmed_at) {
     assertForwardTransition(contract.status, 'open');
@@ -291,6 +384,7 @@ async function cancelIfPastDeadline(contract, transaction) {
       );
       contract.margin_frozen = 0;
     }
+    await releaseForwardCapacityIfAny(contract, transaction);
     return true;
   }
   return false;
@@ -394,6 +488,7 @@ export async function cancelForward(contractId, reason) {
       contract.margin_frozen = 0;
       await contract.save({ transaction: t });
     }
+    await releaseForwardCapacityIfAny(contract, t);
     return contract;
   });
 }
@@ -433,6 +528,7 @@ export async function expirePendingConfirms(now = new Date()) {
         contract.margin_frozen = 0;
         await contract.save({ transaction: t });
       }
+      await releaseForwardCapacityIfAny(contract, t);
       n += 1;
     });
   }

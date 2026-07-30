@@ -52,9 +52,11 @@ async function saveCap(row) {
         spot_qty: row.spot_qty,
         forward_qty: row.forward_qty,
         rights_qty: row.rights_qty,
+        quote_bid: row.quote_bid,
+        quote_ask: row.quote_ask,
       },
     });
-    ElMessage.success('产能已更新');
+    ElMessage.success('产能/报价已更新');
   } catch (e) {
     ElMessage.error(e.message);
   }
@@ -94,33 +96,43 @@ onMounted(load);
       <div>
         <h1 style="margin: 0; font-size: 22px">伙伴工作台</h1>
         <p style="color: #64748b; margin: 4px 0 0">
-          {{ user?.company_name || user?.name }} · 产能 / 报成交 / 交割凭证
+          {{ user?.company_name || user?.name }} · 产能 / 双边报价 / 意向成交 / 交割凭证
         </p>
       </div>
       <el-button link type="primary" @click="logout">退出</el-button>
     </div>
 
     <el-card shadow="never" style="margin-top: 20px">
-      <template #header>我的产能余量（可直接改）</template>
+      <template #header>我的产能余量与双边报价（可直接改）</template>
       <el-table :data="caps" size="small">
         <el-table-column label="SKU" :formatter="(r) => r.sku?.name" />
         <el-table-column prop="region" label="区域" width="100" />
-        <el-table-column label="现货" width="140">
+        <el-table-column label="现货" width="120">
           <template #default="{ row }">
             <el-input-number v-model="row.spot_qty" :min="0" size="small" />
           </template>
         </el-table-column>
-        <el-table-column label="预售" width="140">
+        <el-table-column label="预售" width="120">
           <template #default="{ row }">
             <el-input-number v-model="row.forward_qty" :min="0" size="small" />
           </template>
         </el-table-column>
-        <el-table-column label="权益" width="140">
+        <el-table-column label="权益" width="120">
           <template #default="{ row }">
             <el-input-number v-model="row.rights_qty" :min="0" size="small" />
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="100">
+        <el-table-column label="Bid" width="120">
+          <template #default="{ row }">
+            <el-input-number v-model="row.quote_bid" :min="0" :precision="2" size="small" />
+          </template>
+        </el-table-column>
+        <el-table-column label="Ask" width="120">
+          <template #default="{ row }">
+            <el-input-number v-model="row.quote_ask" :min="0" :precision="2" size="small" />
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="90">
           <template #default="{ row }">
             <el-button link type="primary" @click="saveCap(row)">保存</el-button>
           </template>

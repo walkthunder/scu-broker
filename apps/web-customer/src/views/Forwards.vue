@@ -5,16 +5,26 @@ import { api, currentUser } from '../api';
 
 const route = useRoute();
 const list = ref([]);
+const offers = ref([]);
 const channels = ref([]);
 const whitelisted = ref(false);
 const tab = ref(
-  route.query.tab === 'open' || route.query.tab === 'done' ? route.query.tab : 'pending',
+  route.query.tab === 'open' || route.query.tab === 'done' || route.query.tab === 'buy'
+    ? route.query.tab
+    : 'pending',
 );
 const loading = ref(true);
 const err = ref('');
 const msg = ref('');
 const deliveryTarget = ref(null);
 const channelId = ref(null);
+const buyForm = ref({
+  index_id: null,
+  qty: 1,
+  strike_price: null,
+  tenor_months: 6,
+});
+const buying = ref(false);
 
 const pending = computed(() => list.value.filter((r) => r.status === 'pending_confirm'));
 const openRows = computed(() =>
@@ -39,19 +49,54 @@ async function load() {
   loading.value = true;
   err.value = '';
   try {
-    const [f, wl, ch] = await Promise.all([
+    const [f, wl, ch, of] = await Promise.all([
       api('/customer/forwards'),
       api('/customer/delivery-whitelist/me'),
       api('/customer/delivery-channels'),
+      api('/frd/presale/offers').catch(() => ({ data: [] })),
     ]);
     list.value = f.data || [];
     whitelisted.value = !!wl.data?.whitelisted;
     channels.value = ch.data || [];
+    offers.value = of.data || [];
   } catch (e) {
     err.value = e.message;
     list.value = [];
   } finally {
     loading.value = false;
+  }
+}
+
+function pickOffer(o) {
+  buyForm.value = {
+    index_id: o.index_id,
+    qty: 1,
+    strike_price: o.strike_suggest,
+    tenor_months: o.tenor_months || 6,
+  };
+  tab.value = 'buy';
+}
+
+async function buyPresale() {
+  buying.value = true;
+  err.value = '';
+  msg.value = '';
+  try {
+    const body = {
+      index_id: buyForm.value.index_id,
+      qty: buyForm.value.qty,
+      strike_price: buyForm.value.strike_price,
+      tenor_months: buyForm.value.tenor_months,
+      presale: true,
+    };
+    const out = await api('/frd/presale/open', { method: 'POST', body });
+    msg.value = `预售已提交 #${out.data?.id || ''}，请在「待确认」完成确认（保证金已按初始比例冻结）`;
+    tab.value = 'pending';
+    await load();
+  } catch (e) {
+    err.value = e.message;
+  } finally {
+    buying.value = false;
   }
 }
 
@@ -177,7 +222,7 @@ onMounted(load);
   <div class="mx-auto max-w-6xl px-4 py-8">
     <h1 class="page-title">我的远期持仓</h1>
     <p class="page-desc">
-      待确认需双方确认后生效；浮动盈亏按最新已发布 S 估算（对本方），非最终结算。
+      可自助买入预售（对手方为平台默认卖方）；待确认需双方确认后生效；浮动盈亏按最新已发布 S 估算（对本方），非最终结算。
       交割规则见
       <router-link to="/about#delivery-rules" class="text-amber-400 hover:underline">保障页摘要</router-link>。
       <span v-if="whitelisted" class="text-emerald-400">已开通实物交割白名单。</span>
@@ -187,6 +232,14 @@ onMounted(load);
     <p v-if="err" class="mt-2 text-sm text-rose-400">{{ err }}</p>
 
     <div class="mt-6 flex gap-1 overflow-x-auto text-sm sm:flex-wrap sm:gap-3" style="-webkit-overflow-scrolling: touch">
+      <button
+        type="button"
+        class="tap-target shrink-0 rounded px-3 py-2"
+        :class="tab === 'buy' ? 'bg-amber-500/20 text-amber-300' : 'text-slate-400'"
+        @click="tab = 'buy'"
+      >
+        买入预售
+      </button>
       <button
         type="button"
         class="tap-target shrink-0 rounded px-3 py-2"
@@ -214,9 +267,54 @@ onMounted(load);
     </div>
 
     <p v-if="loading" class="mt-4 text-sm text-slate-500">加载中…</p>
-    <p v-else-if="err && !list.length" class="mt-4 text-sm text-rose-400">{{ err }}</p>
+    <p v-else-if="err && !list.length && tab !== 'buy'" class="mt-4 text-sm text-rose-400">{{ err }}</p>
+    <template v-else-if="tab === 'buy'">
+      <div class="mt-4 panel p-4">
+        <h2 class="text-sm font-medium text-slate-200">今日预售挂牌</h2>
+        <p class="mt-1 text-xs text-slate-500">
+          建议价 = 现货结算价 × (1 + 预售基差)；折让% 相对现货。买入后进入双方确认并冻结初始保证金。
+        </p>
+        <div class="mt-3 space-y-2">
+          <button
+            v-for="o in offers"
+            :key="o.index_id"
+            type="button"
+            class="flex w-full items-center justify-between rounded border border-slate-800 bg-slate-950/40 px-3 py-2 text-left hover:border-amber-500/40"
+            @click="pickOffer(o)"
+          >
+            <div>
+              <div class="text-sm text-slate-100">{{ o.code }} · {{ o.sku?.name }} · {{ o.region }}</div>
+              <div class="mt-0.5 text-xs text-slate-500">
+                现货 S {{ o.spot_settle }} · 建议 X {{ o.strike_suggest }}（{{ o.strike_low }}–{{ o.strike_high }}）·
+                到期 {{ o.expiry_suggest }}
+              </div>
+            </div>
+            <span class="shrink-0 text-sm text-emerald-400">折让 {{ o.discount_pct }}%</span>
+          </button>
+          <p v-if="!offers.length" class="text-sm text-slate-500">暂无挂牌（需已发布结算价）</p>
+        </div>
+        <div v-if="buyForm.index_id" class="mt-4 grid gap-3 border-t border-slate-800 pt-4 sm:grid-cols-4">
+          <label class="text-xs text-slate-500">
+            数量
+            <input v-model.number="buyForm.qty" type="number" min="0.01" step="0.01" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100" />
+          </label>
+          <label class="text-xs text-slate-500">
+            锁价 X
+            <input v-model.number="buyForm.strike_price" type="number" min="0.01" step="0.01" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100" />
+          </label>
+          <label class="text-xs text-slate-500">
+            期限（月）
+            <input v-model.number="buyForm.tenor_months" type="number" min="1" max="24" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100" />
+          </label>
+          <div class="flex items-end">
+            <button type="button" class="btn-primary w-full text-sm" :disabled="buying" @click="buyPresale">
+              {{ buying ? '提交中…' : '确认买入预售' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </template>
     <template v-else>
-      <!-- 移动卡片 -->
       <div class="mt-4 space-y-2 md:hidden">
         <article v-for="row in shown" :key="row.id" class="market-card">
           <div class="flex items-start justify-between gap-2">
@@ -225,6 +323,7 @@ onMounted(load);
               <p class="mt-0.5 text-xs text-slate-500">
                 {{ mySide(row) === 'buyer' ? '买方(多)' : mySide(row) === 'seller' ? '卖方(空)' : '—' }}
                 · X {{ row.strike_price }} · {{ row.qty }} {{ row.unit }}
+                <span v-if="row.discount_label" class="text-emerald-400/90"> · {{ row.discount_label }}</span>
               </p>
             </div>
             <span

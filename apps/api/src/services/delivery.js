@@ -378,6 +378,24 @@ export async function reconcileDelivery(orderId, operatorId, { partner_pay_amoun
   });
 }
 
+/** 争议：冻结流程待人工裁定（不自动扣款） */
+export async function disputeDelivery(orderId, operatorId, { reason, note } = {}) {
+  const order = await DeliveryOrder.findByPk(orderId, { include: orderInclude });
+  if (!order) throw new AppError('交割工单不存在', 404);
+  if (['reconciled', 'rejected', 'done'].includes(order.status)) {
+    throw new AppError('当前状态不可标记争议');
+  }
+  order.status = 'dispute';
+  order.note = [order.note, `【争议】${reason || note || '客户/伙伴争议'}`]
+    .filter(Boolean)
+    .join('\n')
+    .slice(0, 2000);
+  order.reviewed_by = operatorId;
+  order.reviewed_at = new Date();
+  await order.save();
+  return order;
+}
+
 /** 违约：扣划保证金并可选拉黑 */
 export async function defaultDelivery(orderId, operatorId, { reason, blacklist = false, penalty_amount } = {}) {
   return sequelize.transaction(async (t) => {

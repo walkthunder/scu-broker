@@ -71,17 +71,40 @@ export async function runIndexEngineForIndex(indexId, date = todayShanghai(), us
     const ref = await ReferencePrice.findOne({
       where: { sku_id: index.sku_id, region: index.region || 'shanghai', date },
     });
-    const fallback = ref
-      ? Number(ref.price_mid)
-      : prev
-        ? Number(prev.settle_price)
-        : result.price;
-    if (fallback == null) throw new AppError(`指数 ${index.code} 无样本且无参考价可插值`);
+    const { MakerQuote } = await import('../models/frd-models.js');
+    const mm = await MakerQuote.findOne({
+      where: {
+        sku_id: index.sku_id,
+        region: index.region || 'shanghai',
+        date,
+      },
+      order: [['id', 'DESC']],
+    });
+    const mmMid =
+      mm && Number(mm.bid) > 0 && Number(mm.ask) > 0
+        ? (Number(mm.bid) + Number(mm.ask)) / 2
+        : null;
+    let fallback = null;
+    let method = 'reference';
+    if (mmMid != null && prev) {
+      fallback = (mmMid + Number(prev.settle_price)) / 2;
+      method = 'mm_blend';
+    } else if (mmMid != null) {
+      fallback = mmMid;
+      method = 'mm_quote';
+    } else if (ref) {
+      fallback = Number(ref.price_mid);
+    } else if (prev) {
+      fallback = Number(prev.settle_price);
+    } else {
+      fallback = result.price;
+    }
+    if (fallback == null) throw new AppError(`指数 ${index.code} 无样本且无参考价/做市报价可插值`);
     result = {
       price: Math.round(Number(fallback) * 100) / 100,
       sample_count: result.sample_count || 0,
       is_reference: true,
-      method: 'reference',
+      method,
     };
   }
 
@@ -90,7 +113,12 @@ export async function runIndexEngineForIndex(indexId, date = todayShanghai(), us
   }
 
   let print = await IndexPrint.findOne({ where: { index_id: indexId, date } });
-  const source = result.method === 'engine' ? 'engine' : result.method === 'reference' ? 'reference' : 'manual';
+  const source =
+    result.method === 'engine'
+      ? 'engine'
+      : result.method === 'reference' || result.method === 'mm_blend' || result.method === 'mm_quote'
+        ? 'reference'
+        : 'manual';
   if (print) {
     print.settle_price = result.price;
     print.source = source;
@@ -187,7 +215,14 @@ export async function submitBulletinForReview(date, userId) {
   }));
 
   let bulletin = await PriceBulletin.findOne({ where: { date } });
-  const payload = { date, lines, regions: REGIONS, national, rights_ref };
+  const payload = {
+    date,
+    lines,
+    regions: REGIONS,
+    national,
+    rights_ref,
+    presale_basis_pct: basis,
+  };
   if (bulletin) {
     if (bulletin.status === 'published') {
       throw new AppError('当日公告已发布，请走撤销流程或次日再报；禁止静默回退复核');
@@ -397,21 +432,58 @@ export async function getBulletinExportHtml(date) {
   const rows = lines
     .map(
       (l) =>
-        `<tr><td>${escHtml(l.code)}</td><td>${escHtml(l.sku)}</td><td>${escHtml(l.region)}</td><td>${escHtml(l.settle_price)}</td><td>${escHtml(l.change_pct ?? '—')}</td><td>${escHtml(l.presale_ref ?? '—')}</td></tr>`,
+        `<tr><td>${escHtml(l.code)}</td><td>${escHtml(l.sku)}</td><td>${escHtml(l.region)}</td><td>${escHtml(l.settle_price)}</td><td>${escHtml(l.change_pct ?? '—')}</td><td>${escHtml(l.presale_ref ?? '—')}</td><td>${l.is_reference ? '参考价' : escHtml(l.sample_count ?? '—')}</td></tr>`,
     )
     .join('');
   const nat = national
     .map((n) => `<li>${escHtml(n.sku)}: ${escHtml(n.national_price)}（${escHtml(n.regions)} 区）</li>`)
     .join('');
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>价格公告 ${escHtml(date)}</title>
-<style>body{font-family:system-ui,sans-serif;padding:24px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:6px 10px;font-size:13px}h1{font-size:20px}</style>
+<style>
+  @page { size: A4; margin: 16mm; }
+  body{font-family:"PingFang SC","Helvetica Neue",sans-serif;padding:28px;color:#0f172a;background:#fff}
+  h1{font-size:22px;margin:0 0 8px;letter-spacing:.04em}
+  .meta{color:#64748b;font-size:13px;margin-bottom:20px}
+  table{border-collapse:collapse;width:100%;margin:12px 0 24px}
+  th{background:#0f172a;color:#f8fafc;font-weight:600}
+  td,th{border:1px solid #cbd5e1;padding:8px 10px;font-size:13px;text-align:left}
+  tr:nth-child(even) td{background:#f8fafc}
+  h2{font-size:15px;margin:20px 0 8px;color:#334155}
+  .actions{margin:16px 0 24px}
+  .actions button{margin-right:8px;padding:8px 14px;border:1px solid #94a3b8;background:#fff;border-radius:6px;cursor:pointer}
+  @media print {.actions{display:none}}
+  .foot{margin-top:28px;color:#94a3b8;font-size:11px}
+</style>
 </head><body>
+<div class="actions">
+  <button onclick="window.print()">打印 / 另存 PDF</button>
+  <button onclick="downloadPng()">下载长图 PNG</button>
+</div>
+<div id="sheet">
 <h1>硅元引擎 · 日价格公告 ${escHtml(date)}</h1>
-<p>状态：${escHtml(bulletin.status)} · 发布于 ${escHtml(bulletin.published_at || '—')}</p>
-<h2>区域结算价</h2>
-<table><thead><tr><th>指数</th><th>标的</th><th>区域</th><th>结算价</th><th>涨跌%</th><th>预售参考</th></tr></thead><tbody>${rows}</tbody></table>
+<p class="meta">状态：${escHtml(bulletin.status)} · 发布于 ${escHtml(bulletin.published_at || '—')} · 双人复核留痕可审计</p>
+<h2>区域结算价 · 预售参考（现货×(1${Number(payload.presale_basis_pct ?? -20) >= 0 ? '+' : ''}${escHtml(payload.presale_basis_pct ?? -20)}%)）</h2>
+<table><thead><tr><th>指数</th><th>标的</th><th>区域</th><th>结算价 S</th><th>涨跌%</th><th>预售参考</th><th>样本/标注</th></tr></thead><tbody>${rows}</tbody></table>
 <h2>全国综合价</h2><ul>${nat || '<li>无</li>'}</ul>
-<p style="margin-top:24px;color:#666;font-size:12px">导出时间 ${escHtml(new Date().toISOString())} · 仅供内部与获邀客户使用</p>
+<p class="foot">CompriX 对客素材 · 导出 ${escHtml(new Date().toISOString())} · 不构成要约</p>
+</div>
+<script>
+async function downloadPng(){
+  const el=document.getElementById('sheet');
+  const w=Math.max(el.scrollWidth,720), h=el.scrollHeight+40;
+  const c=document.createElement('canvas'); c.width=w*2; c.height=h*2;
+  const ctx=c.getContext('2d'); ctx.scale(2,2); ctx.fillStyle='#fff'; ctx.fillRect(0,0,w,h);
+  ctx.fillStyle='#0f172a'; ctx.font='bold 20px sans-serif';
+  ctx.fillText(document.querySelector('h1').innerText,24,36);
+  ctx.font='13px sans-serif'; ctx.fillStyle='#334155';
+  let y=64;
+  document.querySelectorAll('tbody tr').forEach(tr=>{
+    const t=[...tr.children].map(td=>td.innerText).join('  |  ');
+    ctx.fillText(t.slice(0,120),24,y); y+=22;
+  });
+  const a=document.createElement('a'); a.href=c.toDataURL('image/png'); a.download='bulletin-${escHtml(date)}.png'; a.click();
+}
+</script>
 </body></html>`;
 }
 

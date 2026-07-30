@@ -25,6 +25,7 @@ import { PriceIndex } from '../models/index.js';
 import { PriceBulletin as PB } from '../models/frd-models.js';
 import {
   adminDeposit,
+  adminWithdraw,
   getBuyingPower,
   listEntries,
   getLedgerBreakdown,
@@ -46,10 +47,16 @@ import {
   putPoolStats,
   refPremium,
   presentRight,
+  selfOpenRight,
 } from '../services/right-contract.js';
-import { PartnerCapacity, CrmLead, CrmNote, SpotBookOrder } from '../models/frd-models.js';
+import { PartnerCapacity, CrmLead, CrmNote, SpotBookOrder, MakerQuote } from '../models/frd-models.js';
 import { User } from '../models/index.js';
-import { setDeliveryIntent, listBillsForUser } from '../services/forward-settle.js';
+import {
+  setDeliveryIntent,
+  listBillsForUser,
+  listPresaleOffers,
+  selfOpenForward,
+} from '../services/forward-settle.js';
 import { todayShanghai } from '../utils/market.js';
 import { Op } from 'sequelize';
 import {
@@ -289,6 +296,15 @@ router.post('/ledger/deposit', ...staff, async (req, res, next) => {
   }
 });
 
+router.post('/ledger/withdraw', ...staff, async (req, res, next) => {
+  try {
+    await adminWithdraw(req.body.user_id, req.body.amount, req.user.id, req.body.note);
+    ok(res, await getBuyingPower(req.body.user_id));
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.get('/ledger/:userId', ...staff, async (req, res, next) => {
   try {
     ok(res, {
@@ -353,6 +369,26 @@ router.post('/spot/orders/:id/cancel', ...portal, async (req, res, next) => {
   }
 });
 
+// —— 预售自助 ——
+router.get('/presale/offers', ...portal, async (_req, res, next) => {
+  try {
+    ok(res, await listPresaleOffers());
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/presale/open', ...portal, async (req, res, next) => {
+  try {
+    if (!['customer', 'admin', 'broker'].includes(req.user.role)) {
+      throw new AppError('仅客户可自助买入预售', 403);
+    }
+    ok(res, await selfOpenForward(req.user.id, req.body), '已提交预售，请双方确认');
+  } catch (e) {
+    next(e);
+  }
+});
+
 // —— 权益 ——
 router.get('/rights', ...staff, async (req, res, next) => {
   try {
@@ -379,9 +415,43 @@ router.post('/rights', ...staff, async (req, res, next) => {
   }
 });
 
-router.post('/rights/premium-ref', ...staff, async (req, res, next) => {
+router.post('/rights/self-open', ...portal, async (req, res, next) => {
   try {
-    ok(res, refPremium(req.body));
+    if (!['customer', 'admin', 'broker'].includes(req.user.role)) {
+      throw new AppError('仅客户可自助买入权益', 403);
+    }
+    const row = await selfOpenRight(req.user.id, req.body);
+    ok(res, await presentRight(row), '已提交权益，请确认后由运营收权利金');
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/rights/premium-ref', ...portal, async (req, res, next) => {
+  try {
+    const params = await getPlatformParams();
+    const { kind, strike, qty, sku_id, region, days, vol } = req.body;
+    let spot = Number(req.body.spot);
+    if (!(spot > 0) && sku_id && region) {
+      const idx = await PriceIndex.findOne({
+        where: { sku_id, region, status: 'active' },
+      });
+      if (idx) {
+        const print = await getLatestPublished(idx.id);
+        if (print) spot = Number(print.settle_price);
+      }
+    }
+    ok(
+      res,
+      refPremium({
+        spot: spot || Number(strike),
+        strike: Number(strike),
+        kind: kind || 'call',
+        days: days || params.right_days,
+        vol: vol || params.vol_for_premium,
+        qty: qty || 1,
+      }),
+    );
   } catch (e) {
     next(e);
   }
@@ -473,7 +543,16 @@ router.get('/partner-capacities', ...staff, async (_req, res, next) => {
 
 router.post('/partner-capacities', ...staff, async (req, res, next) => {
   try {
-    const { supplier_id, sku_id, region, spot_qty, forward_qty, rights_qty } = req.body;
+    const {
+      supplier_id,
+      sku_id,
+      region,
+      spot_qty,
+      forward_qty,
+      rights_qty,
+      quote_bid,
+      quote_ask,
+    } = req.body;
     const [row] = await PartnerCapacity.findOrCreate({
       where: { supplier_id, sku_id, region },
       defaults: {
@@ -483,11 +562,15 @@ router.post('/partner-capacities', ...staff, async (req, res, next) => {
         spot_qty: spot_qty || 0,
         forward_qty: forward_qty || 0,
         rights_qty: rights_qty || 0,
+        quote_bid: quote_bid ?? null,
+        quote_ask: quote_ask ?? null,
       },
     });
     if (spot_qty != null) row.spot_qty = spot_qty;
     if (forward_qty != null) row.forward_qty = forward_qty;
     if (rights_qty != null) row.rights_qty = rights_qty;
+    if (quote_bid !== undefined) row.quote_bid = quote_bid;
+    if (quote_ask !== undefined) row.quote_ask = quote_ask;
     await row.save();
     ok(res, row);
   } catch (e) {
@@ -522,7 +605,7 @@ router.put('/partner/capacities/:id', ...partner, async (req, res, next) => {
     if (!row || Number(row.supplier_id) !== Number(u.supplier_id)) {
       throw new AppError('产能记录不存在或无权修改', 404);
     }
-    for (const f of ['spot_qty', 'forward_qty', 'rights_qty', 'active']) {
+    for (const f of ['spot_qty', 'forward_qty', 'rights_qty', 'quote_bid', 'quote_ask', 'active']) {
       if (req.body[f] !== undefined) row[f] = req.body[f];
     }
     await row.save();
@@ -838,6 +921,62 @@ router.get('/price-bulletins/:date/export.html', ...staff, async (req, res, next
     const html = await getBulletinExportHtml(req.params.date);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(html);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// —— 做市双边参考报价 ——
+router.get('/maker-quotes', ...staff, async (req, res, next) => {
+  try {
+    const where = {};
+    if (req.query.sku_id) where.sku_id = Number(req.query.sku_id);
+    if (req.query.region) where.region = req.query.region;
+    if (req.query.date) where.date = req.query.date;
+    ok(
+      res,
+      await MakerQuote.findAll({
+        where,
+        order: [
+          ['date', 'DESC'],
+          ['id', 'DESC'],
+        ],
+        limit: 100,
+      }),
+    );
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/maker-quotes', ...staff, async (req, res, next) => {
+  try {
+    const { sku_id, region, date, bid, ask, note } = req.body;
+    if (!sku_id || !(Number(bid) > 0) || !(Number(ask) > 0)) {
+      throw new AppError('sku_id、bid、ask 必填且须大于 0');
+    }
+    if (Number(ask) < Number(bid)) throw new AppError('ask 须 ≥ bid');
+    const row = await MakerQuote.create({
+      sku_id: Number(sku_id),
+      region: region || 'shanghai',
+      date: date || todayShanghai(),
+      bid: Number(bid),
+      ask: Number(ask),
+      note: note || null,
+      created_by: req.user.id,
+    });
+    ok(res, row);
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.delete('/maker-quotes/:id', ...staff, requireRoles('admin'), async (req, res, next) => {
+  try {
+    const row = await MakerQuote.findByPk(req.params.id);
+    if (!row) throw new AppError('报价不存在', 404);
+    await row.destroy();
+    ok(res, { id: Number(req.params.id) });
   } catch (e) {
     next(e);
   }

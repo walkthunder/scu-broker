@@ -124,6 +124,7 @@ export async function getLedgerBreakdown(userId) {
       premium_paid: byType.premium || 0,
       settle_net: (byType.settle || 0) + (byType.payout || 0) - (byType.penalty || 0),
       deposits: byType.deposit || 0,
+      withdrawals: byType.withdraw || 0,
       partner_pay: byType.partner_pay || 0,
       penalty: byType.penalty || 0,
     },
@@ -158,5 +159,17 @@ export async function adminDeposit(userId, amount, operatorId, note) {
     note: note || '运营入账',
     operatorId,
     mode: 'available',
+  });
+}
+
+export async function adminWithdraw(userId, amount, operatorId, note) {
+  if (!(Number(amount) > 0)) throw new AppError('金额须大于 0');
+  return postLedger({
+    userId,
+    type: 'withdraw',
+    amount: Number(amount),
+    note: note || '运营出金',
+    operatorId,
+    mode: 'debit',
   });
 }

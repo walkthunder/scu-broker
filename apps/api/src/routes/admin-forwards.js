@@ -37,6 +37,7 @@ import {
   startDelivery,
   reconcileDelivery,
   defaultDelivery,
+  disputeDelivery,
 } from '../services/delivery.js';
 
 const router = Router();
@@ -279,6 +280,14 @@ router.post('/delivery-orders/:id/reconcile', ...staff, async (req, res, next) =
 router.post('/delivery-orders/:id/default', ...staff, requireRoles('admin'), async (req, res, next) => {
   try {
     ok(res, await defaultDelivery(Number(req.params.id), req.user.id, req.body), '已违约处理');
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/delivery-orders/:id/dispute', ...staff, async (req, res, next) => {
+  try {
+    ok(res, await disputeDelivery(Number(req.params.id), req.user.id, req.body), '已标记争议');
   } catch (e) {
     next(e);
   }

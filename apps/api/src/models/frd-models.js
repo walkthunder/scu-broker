@@ -155,11 +155,32 @@ export const PartnerCapacity = sequelize.define(
     spot_qty: { type: DataTypes.DECIMAL(14, 4), allowNull: false, defaultValue: 0 },
     forward_qty: { type: DataTypes.DECIMAL(14, 4), allowNull: false, defaultValue: 0 },
     rights_qty: { type: DataTypes.DECIMAL(14, 4), allowNull: false, defaultValue: 0 },
+    quote_bid: { type: DataTypes.DECIMAL(14, 4), allowNull: true },
+    quote_ask: { type: DataTypes.DECIMAL(14, 4), allowNull: true },
     active: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
   },
   {
     tableName: 'partner_capacities',
     indexes: [{ unique: true, fields: ['supplier_id', 'sku_id', 'region'] }],
+  },
+);
+
+/** 做市商双边参考报价（样本不足时插值） */
+export const MakerQuote = sequelize.define(
+  'MakerQuote',
+  {
+    id: { type: DataTypes.INTEGER.UNSIGNED, autoIncrement: true, primaryKey: true },
+    sku_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+    region: { type: DataTypes.STRING(32), allowNull: false, defaultValue: 'shanghai' },
+    date: { type: DataTypes.DATEONLY, allowNull: false },
+    bid: { type: DataTypes.DECIMAL(14, 4), allowNull: false },
+    ask: { type: DataTypes.DECIMAL(14, 4), allowNull: false },
+    note: { type: DataTypes.STRING(255), allowNull: true },
+    created_by: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+  },
+  {
+    tableName: 'maker_quotes',
+    indexes: [{ fields: ['sku_id', 'region', 'date'] }],
   },
 );
 

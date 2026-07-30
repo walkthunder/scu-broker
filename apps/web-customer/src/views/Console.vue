@@ -71,6 +71,9 @@ function goTodo(t) {
       分账：权利金累计 {{ Number(ledger.buckets.premium_paid || 0).toLocaleString() }} · 结算净额
       {{ Number(ledger.buckets.settle_net || 0).toLocaleString() }} · 入金
       {{ Number(ledger.buckets.deposits || 0).toLocaleString() }}
+      <span v-if="ledger.buckets.withdrawals">
+        · 出金 {{ Number(ledger.buckets.withdrawals || 0).toLocaleString() }}
+      </span>
     </div>
     <div v-if="(consoleData?.todos || []).length" class="panel mt-4 p-4">
       <h2 class="mb-2 text-sm text-slate-300">待办（点击跳转）</h2>
