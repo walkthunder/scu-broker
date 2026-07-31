@@ -179,9 +179,9 @@ export async function ensureIndexPrints(date) {
 /** 保证当日价格公告已发布（首页 / 全国综合价依赖） */
 export async function ensurePublishedBulletin(date, userId = null) {
   const existing = await PriceBulletin.findOne({ where: { date } });
-  if (existing?.status === 'published' && existing.payload?.lines?.length) {
-    return existing;
-  }
+  const { getPlatformParams } = await import('./platform-config.js');
+  const params = await getPlatformParams();
+  const basis = Number(params.presale_basis_pct ?? -20);
 
   const indices = await PriceIndex.findAll({
     where: { status: 'active' },
@@ -219,10 +219,12 @@ export async function ensurePublishedBulletin(date, userId = null) {
       change_pct: change,
       sample_count: print.sample_count || 0,
       is_reference: !!print.is_reference,
-      presale_ref: Math.round(Number(print.settle_price) * 0.8 * 100) / 100,
+      presale_ref: Math.round(Number(print.settle_price) * (1 + basis / 100) * 100) / 100,
     });
   }
-  if (!lines.length) return null;
+  if (!lines.length) {
+    return existing?.status === 'published' ? existing : null;
+  }
 
   const bySku = {};
   for (const line of lines) {
@@ -242,7 +244,7 @@ export async function ensurePublishedBulletin(date, userId = null) {
     regions: REGIONS,
     national,
     rights_ref: [],
-    presale_basis_pct: -20,
+    presale_basis_pct: basis,
     headline: '算力现货偏紧，包月询价活跃；H100/H200 上海机房交期约 1–3 天',
   };
   const adminId = userId ?? (await systemAdminId());

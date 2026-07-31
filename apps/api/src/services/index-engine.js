@@ -129,13 +129,17 @@ export async function runIndexEngineForIndex(indexId, date = todayShanghai(), us
         ? 'reference'
         : 'manual';
   if (print) {
+    const wasPublished = print.status === 'published';
     print.settle_price = result.price;
     print.source = source;
-    print.status = 'draft';
+    // 已发布则保留 published，避免日作业把早上公告打回 draft 导致前台指数回退到昨日
+    if (!wasPublished) {
+      print.status = 'draft';
+      print.reviewed_by = null;
+    }
     print.sample_count = result.sample_count;
     print.is_reference = !!result.is_reference;
     print.calculated_by = userId;
-    print.reviewed_by = null;
     await print.save();
   } else {
     print = await IndexPrint.create({
@@ -498,11 +502,16 @@ async function downloadPng(){
 
 export async function getNationalComposite(date = todayShanghai()) {
   const bulletin = await PriceBulletin.findOne({
-    where: { status: 'published' },
-    order: [['date', 'DESC']],
+    where: { date, status: 'published' },
   });
-  if (!bulletin) return [];
-  let payload = bulletin.payload;
+  const row =
+    bulletin ||
+    (await PriceBulletin.findOne({
+      where: { status: 'published' },
+      order: [['date', 'DESC']],
+    }));
+  if (!row) return [];
+  let payload = row.payload;
   if (typeof payload === 'string') {
     try {
       payload = JSON.parse(payload);
@@ -511,7 +520,7 @@ export async function getNationalComposite(date = todayShanghai()) {
     }
   }
   if (payload?.national?.length) return payload.national;
-  let snapshot = bulletin.snapshot;
+  let snapshot = row.snapshot;
   if (typeof snapshot === 'string') {
     try {
       snapshot = JSON.parse(snapshot);

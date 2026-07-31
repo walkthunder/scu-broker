@@ -60,7 +60,17 @@ export async function dailyPublishPrep(date = todayShanghai(), userId = null) {
   try {
     bulletin = await submitBulletinForReview(date, userId);
   } catch (e) {
-    bulletin_error = e.message;
+    // 当日公告已发布时：用最新 prints 刷新公告 payload，避免引擎价与公告脱节
+    if (String(e.message || '').includes('已发布')) {
+      try {
+        const { ensurePublishedBulletin } = await import('./ensure-market-day.js');
+        bulletin = await ensurePublishedBulletin(date, userId);
+      } catch (e2) {
+        bulletin_error = e2.message || e.message;
+      }
+    } else {
+      bulletin_error = e.message;
+    }
   }
   return { date, engine, bulletin, bulletin_error };
 }
