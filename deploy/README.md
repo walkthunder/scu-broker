@@ -9,6 +9,8 @@
 | 伙伴门户 | https://computx.webinfra.cloud/scu/partner/ |
 | API 健康检查 | https://computx.webinfra.cloud/scu/api/health |
 
+**源站 SSH（勿用域名 SSH）**：域名走 CDN，仅 443；部署请用 `root@111.231.6.34`，路径 `/opt/scu-broker`，服务 `scu-api`（`:3010`）。同机有其它 Docker 业务，禁止 `docker system prune` / 停无关容器。
+
 与同机 Dify（域名根路径 `/`）隔离：仅增加 Nginx `location ^~ /scu*`，不改既有反代。
 
 ## 试用账号（种子数据）
@@ -54,10 +56,10 @@
 VITE_BASE=/scu/ VITE_API_BASE=/scu/api npm run build --prefix apps/web-customer
 VITE_BASE=/scu/admin/ VITE_API_BASE=/scu/api npm run build --prefix apps/web-admin
 VITE_BASE=/scu/partner/ VITE_API_BASE=/scu/api npm run build --prefix apps/web-partner
-rsync -az --delete --exclude admin --exclude partner apps/web-customer/dist/ root@<host>:/opt/scu-broker/www/scu/
-rsync -az --delete apps/web-admin/dist/ root@<host>:/opt/scu-broker/www/scu/admin/
-rsync -az --delete apps/web-partner/dist/ root@<host>:/opt/scu-broker/www/scu/partner/
-rsync -az --exclude node_modules --exclude .env apps/api/ root@<host>:/opt/scu-broker/apps/api/
+rsync -az --delete --exclude admin --exclude partner apps/web-customer/dist/ root@111.231.6.34:/opt/scu-broker/www/scu/
+rsync -az --delete apps/web-admin/dist/ root@111.231.6.34:/opt/scu-broker/www/scu/admin/
+rsync -az --delete apps/web-partner/dist/ root@111.231.6.34:/opt/scu-broker/www/scu/partner/
+rsync -az --exclude node_modules --exclude .env apps/api/ root@111.231.6.34:/opt/scu-broker/apps/api/
 ```
 
 在服务器：

@@ -266,49 +266,54 @@ export async function ensurePublishedBulletin(date, userId = null) {
 }
 
 async function ensureMakerQuotes(date) {
-  const adminId = await systemAdminId();
-  const names = ['H100', 'H200', 'PPU', '算力 Token'];
-  let n = 0;
-  for (const name of names) {
-    const sku = await Sku.findOne({ where: { name } });
-    if (!sku) continue;
-    for (const region of ['shanghai', 'neimeng', 'guizhou']) {
-      const ref = await ReferencePrice.findOne({
-        where: { sku_id: sku.id, date, region },
-      });
-      if (!ref) continue;
-      const mid = Number(ref.price_mid);
-      const spread = mid < 100 ? mid * 0.04 : mid * 0.025;
-      const [row] = await MakerQuote.findOrCreate({
-        where: { sku_id: sku.id, region, date },
-        defaults: {
-          sku_id: sku.id,
-          region,
-          date,
-          bid: roundMoney(mid - spread, sku.type),
-          ask: roundMoney(mid + spread, sku.type),
-          created_by: adminId,
-        },
-      });
-      if (!(Number(row.bid) > 0)) {
-        row.bid = roundMoney(mid - spread, sku.type);
-        row.ask = roundMoney(mid + spread, sku.type);
-        await row.save();
-      }
-      const caps = await PartnerCapacity.findAll({
-        where: { sku_id: sku.id, region, active: true },
-      });
-      for (const cap of caps) {
-        if (!(Number(cap.quote_bid) > 0)) {
-          cap.quote_bid = row.bid;
-          cap.quote_ask = row.ask;
-          await cap.save();
+  try {
+    const adminId = await systemAdminId();
+    const names = ['H100', 'H200', 'PPU', '算力 Token'];
+    let n = 0;
+    for (const name of names) {
+      const sku = await Sku.findOne({ where: { name } });
+      if (!sku) continue;
+      for (const region of ['shanghai', 'neimeng', 'guizhou']) {
+        const ref = await ReferencePrice.findOne({
+          where: { sku_id: sku.id, date, region },
+        });
+        if (!ref) continue;
+        const mid = Number(ref.price_mid);
+        const spread = mid < 100 ? mid * 0.04 : mid * 0.025;
+        const [row] = await MakerQuote.findOrCreate({
+          where: { sku_id: sku.id, region, date },
+          defaults: {
+            sku_id: sku.id,
+            region,
+            date,
+            bid: roundMoney(mid - spread, sku.type),
+            ask: roundMoney(mid + spread, sku.type),
+            created_by: adminId,
+          },
+        });
+        if (!(Number(row.bid) > 0)) {
+          row.bid = roundMoney(mid - spread, sku.type);
+          row.ask = roundMoney(mid + spread, sku.type);
+          await row.save();
         }
+        const caps = await PartnerCapacity.findAll({
+          where: { sku_id: sku.id, region, active: true },
+        });
+        for (const cap of caps) {
+          if (!(Number(cap.quote_bid) > 0)) {
+            cap.quote_bid = row.bid;
+            cap.quote_ask = row.ask;
+            await cap.save();
+          }
+        }
+        n += 1;
       }
-      n += 1;
     }
+    return n;
+  } catch (e) {
+    console.warn('[market-day] maker quotes skipped:', e?.message || e);
+    return 0;
   }
-  return n;
 }
 
 async function ensureDealFeeds(date) {
