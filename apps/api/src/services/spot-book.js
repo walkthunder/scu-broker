@@ -7,8 +7,46 @@ import { createChannelDeal } from './channel-deal.js';
 import { postLedger } from './ledger.js';
 import { sequelize } from '../config/database.js';
 import { REGION_CODES } from '../constants/platform.js';
-import { assertCapacity, consumeCapacity } from './partner-capacity.js';
+import { consumeCapacity, releaseCapacity } from './partner-capacity.js';
 import { assertNotionalLimits } from './exposure.js';
+import { resolveMarketQuote } from './market-resolve.js';
+
+/** @deprecated 使用 resolveMarketQuote；保留别名供路由兼容 */
+export async function getIndicativeQuote(skuId, region) {
+  return resolveMarketQuote(skuId, region);
+}
+
+/**
+ * 将历史「成交才扣产能」的未完成卖单一次性占上产能，之后逻辑单轨：
+ * 挂卖 consume / 取消释放 / 成交不扣。
+ */
+export async function migrateOpenSellCapacity() {
+  const opens = await SpotBookOrder.findAll({
+    where: {
+      side: 'sell',
+      status: { [Op.in]: ['open', 'partial'] },
+      capacity_held: false,
+    },
+  });
+  let n = 0;
+  for (const o of opens) {
+    await sequelize.transaction(async (t) => {
+      const order = await SpotBookOrder.findByPk(o.id, {
+        transaction: t,
+        lock: t.LOCK.UPDATE,
+      });
+      if (!order || order.capacity_held || !['open', 'partial'].includes(order.status)) return;
+      const unfilled = Number(order.qty) - Number(order.filled_qty);
+      if (unfilled > 0) {
+        await consumeCapacity('spot', order.sku_id, order.region, unfilled, t);
+      }
+      order.capacity_held = true;
+      await order.save({ transaction: t });
+      n += 1;
+    });
+  }
+  return n;
+}
 
 async function marginFor(price, qty) {
   // 现货挂单按全额名义冻结（钱在内），成交后全额划转
@@ -157,7 +195,7 @@ async function matchOrder(order, transaction) {
     await order.save({ transaction });
     await opposite.save({ transaction });
 
-    await consumeCapacity('spot', order.sku_id, order.region, qty, transaction);
+    // 卖方产能在挂单时已占用，成交不再扣减
 
     // 买方：按成交价扣款；限价单若成交价更优，释放多冻的差额
     const fillMarginBase = Number(px) > 0 ? px : Number(buy.price);
@@ -276,8 +314,9 @@ export async function placeSpotOrder(userId, body) {
   }
 
   return sequelize.transaction(async (t) => {
+    // 卖单挂单即扣减可交割余量，避免多笔 resting 卖单合计超卖
     if (side === 'sell') {
-      await assertCapacity('spot', sku_id, region, qty, t);
+      await consumeCapacity('spot', sku_id, region, qty, t);
     }
     if (side === 'buy' && freezePrice > 0) {
       await assertNotionalLimits(userId, freezePrice * Number(qty), t);
@@ -293,6 +332,7 @@ export async function placeSpotOrder(userId, body) {
         price: type === 'market' ? freezePrice : bookPrice,
         qty,
         expires_at: expires_at || null,
+        capacity_held: side === 'sell',
       },
       { transaction: t },
     );
@@ -344,6 +384,9 @@ export async function cancelSpotOrder(userId, orderId) {
           t,
         );
       }
+    }
+    if (order.side === 'sell' && unfilled > 0) {
+      await releaseCapacity('spot', order.sku_id, order.region, unfilled, t);
     }
     order.status = 'cancelled';
     await order.save({ transaction: t });

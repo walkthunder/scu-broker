@@ -84,6 +84,8 @@ export const SpotBookOrder = sequelize.define(
     },
     expires_at: { type: DataTypes.DATE, allowNull: true },
     avg_price: { type: DataTypes.DECIMAL(14, 4), allowNull: true },
+    /** 挂单时已预留伙伴现货产能；旧单为 false，成交时仍按量扣减 */
+    capacity_held: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
   },
   { tableName: 'spot_book_orders' },
 );

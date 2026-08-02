@@ -32,6 +32,7 @@ import {
   cancelSpotOrder,
   getOrderBook,
   estimateImpact,
+  getIndicativeQuote,
 } from '../services/spot-book.js';
 import {
   createRight,
@@ -45,7 +46,7 @@ import {
   selfOpenRight,
 } from '../services/right-contract.js';
 import { PartnerCapacity, CrmLead, CrmNote, SpotBookOrder, MakerQuote, PriceBulletin as PB } from '../models/frd-models.js';
-import { User, PriceIndex } from '../models/index.js';
+import { User } from '../models/index.js';
 import {
   setDeliveryIntent,
   listBillsForUser,
@@ -290,6 +291,7 @@ router.get('/spot/book', async (req, res, next) => {
     if (!Number.isFinite(sku_id) || sku_id <= 0) throw new AppError('请指定 sku_id');
     const region = req.query.region || 'shanghai';
     const book = await getOrderBook(sku_id, region);
+    const indicative = await getIndicativeQuote(sku_id, region);
     const qty = Number(req.query.qty || 0);
     const impact =
       qty > 0
@@ -298,7 +300,7 @@ router.get('/spot/book', async (req, res, next) => {
             sell: estimateImpact(book.bids, qty),
           }
         : null;
-    ok(res, { ...book, impact });
+    ok(res, { ...book, impact, indicative });
   } catch (e) {
     next(e);
   }
@@ -400,9 +402,8 @@ router.post('/rights/premium-ref', ...portal, async (req, res, next) => {
     const { kind, strike, qty, sku_id, region, days, vol } = req.body;
     let spot = Number(req.body.spot);
     if (!(spot > 0) && sku_id && region) {
-      const idx = await PriceIndex.findOne({
-        where: { sku_id, region, status: 'active' },
-      });
+      const { resolvePrimaryIndex } = await import('../services/market-resolve.js');
+      const idx = await resolvePrimaryIndex(sku_id, region);
       if (idx) {
         const print = await getLatestPublished(idx.id);
         if (print) spot = Number(print.settle_price);
@@ -698,11 +699,18 @@ router.get('/console/me', ...portal, async (req, res, next) => {
   try {
     const { listForwardsForUser } = await import('../services/forward-settle.js');
     const bal = await getLedgerBreakdown(req.user.id);
-    const rights = await listRights({ userId: req.user.id });
-    const forwards = await listForwardsForUser(req.user.id);
+    // 控制台只展示有效持仓；已取消/到期留给权益/预售专页
+    const rights = (await listRights({ userId: req.user.id })).filter((r) =>
+      ['pending_confirm', 'open'].includes(r.status),
+    );
+    const forwards = (await listForwardsForUser(req.user.id)).filter((f) =>
+      ['pending_confirm', 'open', 'delivery_pending'].includes(f.status),
+    );
     const bills = await listBillsForUser(req.user.id);
     const spotOrders = await SpotBookOrder.findAll({
       where: { user_id: req.user.id, status: { [Op.in]: ['open', 'partial'] } },
+      include: [{ association: 'sku', attributes: ['id', 'name', 'unit'] }],
+      order: [['id', 'DESC']],
       limit: 20,
     });
     const openFwdMtm = forwards
@@ -711,6 +719,89 @@ router.get('/console/me', ...portal, async (req, res, next) => {
     const underMine = (await listUnderMargined()).filter(
       (u) => Number(u.buyer_id) === Number(req.user.id),
     );
+
+    // 控制台行情：全国综合价即可，避免前端解析/过滤整页公告行
+    const bulletin = await PB.findOne({
+      where: { status: 'published' },
+      order: [['date', 'DESC']],
+      attributes: ['date'],
+    });
+    const marketDate = bulletin?.date || todayShanghai();
+    const national = await getNationalComposite(marketDate);
+
+    const today = todayShanghai();
+    const todos = [
+      ...underMine.map((u) => ({
+        type: 'margin_call',
+        id: u.contract_id,
+        priority: 1,
+        title: '预售需追加保证金',
+        detail: `合约 #${u.contract_id} · 缺口约 ${Number(u.shortfall).toLocaleString('zh-CN')} 元`,
+        href: '/forwards?tab=open',
+        cta: '去处理',
+      })),
+      ...rights
+        .filter((r) => r.status === 'pending_confirm' && !r.buyer_confirmed_at)
+        .map((r) => ({
+          type: 'right_confirm',
+          id: r.id,
+          priority: 2,
+          title: '权益待确认',
+          detail: `${r.kind_label || '权益'} #${r.id} · 行权价 ${Number(r.strike).toLocaleString('zh-CN')}`,
+          href: '/rights',
+          cta: '去确认',
+        })),
+      ...rights
+        .filter((r) => r.status === 'open' && r.window_start <= today && r.window_end >= today)
+        .map((r) => ({
+          type: 'right_exercise',
+          id: r.id,
+          priority: 2,
+          title: '权益可行权',
+          detail: `${r.kind_label || '权益'} #${r.id} · 窗口至 ${r.window_end}`,
+          href: '/rights',
+          cta: '去行权',
+        })),
+      ...forwards
+        .filter((f) => f.status === 'pending_confirm')
+        .map((f) => ({
+          type: 'forward_confirm',
+          id: f.id,
+          priority: 2,
+          title: '预售合约待确认',
+          detail: `${f.contract_code || '#' + f.id} · 锁价 ${Number(f.strike_price).toLocaleString('zh-CN')}`,
+          href: '/forwards?tab=pending',
+          cta: '去确认',
+        })),
+      ...forwards
+        .filter(
+          (f) =>
+            f.status === 'open' &&
+            f.intent_window_open &&
+            (f.delivery_intent === 'unset' || !f.delivery_intent),
+        )
+        .map((f) => ({
+          type: 'delivery_intent',
+          id: f.id,
+          priority: 3,
+          title: '请确认交割意愿',
+          detail: `${f.contract_code || '#' + f.id} · 到期 ${f.expiry_date || '—'}（默认现金结算）`,
+          href: '/forwards?tab=open',
+          cta: '去设置',
+        })),
+      ...bills
+        .filter((b) => b.pay_status !== 'done' && b.cashflow === 'pay')
+        .map((b) => ({
+          type: 'bill_pay',
+          id: b.id,
+          priority: 2,
+          title: '结算账单待收付',
+          detail: `账单 #${b.id} · 请按账单完成线下收付`,
+          href: '/bills',
+          cta: '查看账单',
+        })),
+    ].sort((a, b) => (a.priority || 9) - (b.priority || 9));
+
     ok(res, {
       ledger: bal,
       rights,
@@ -722,74 +813,12 @@ router.get('/console/me', ...portal, async (req, res, next) => {
         )
       ),
       spot_open: spotOrders,
-      pnl: {
-        forward_mtm: Math.round(openFwdMtm * 100) / 100,
-        realized_hint: '见结算账单 cashflow',
+      pnl: { forward_mtm: Math.round(openFwdMtm * 100) / 100 },
+      todos,
+      market: {
+        date: marketDate,
+        national: (national || []).slice(0, 8),
       },
-      todos: [
-        ...underMine.map((u) => ({
-          type: 'margin_call',
-          id: u.contract_id,
-          shortfall: u.shortfall,
-          label: `预售#${u.contract_id} 需追保 ${u.shortfall}`,
-          href: '/forwards?tab=open',
-        })),
-        ...rights
-          .filter((r) => r.status === 'pending_confirm' && !r.buyer_confirmed_at)
-          .map((r) => ({
-            type: 'right_confirm',
-            id: r.id,
-            label: `权益#${r.id} 待确认`,
-            href: '/rights',
-          })),
-        ...rights
-          .filter((r) => {
-            if (r.status !== 'open') return false;
-            const today = todayShanghai();
-            return r.window_start <= today && r.window_end >= today;
-          })
-          .map((r) => ({
-            type: 'right_exercise',
-            id: r.id,
-            label: `权益#${r.id} 可行权`,
-            href: '/rights',
-          })),
-        ...forwards
-          .filter((f) => f.status === 'pending_confirm')
-          .map((f) => ({
-            type: 'forward_confirm',
-            id: f.id,
-            label: `预售#${f.id} 待确认`,
-            href: '/forwards?tab=pending',
-          })),
-        ...forwards
-          .filter(
-            (f) =>
-              f.status === 'open' &&
-              f.intent_window_open &&
-              (f.delivery_intent === 'unset' || !f.delivery_intent),
-          )
-          .map((f) => ({
-            type: 'delivery_intent',
-            id: f.id,
-            label: `预售#${f.id} 待交割意愿`,
-            href: '/forwards?tab=open',
-          })),
-        ...bills
-          .filter((b) => b.pay_status !== 'done' && b.cashflow === 'pay')
-          .map((b) => ({
-            type: 'bill_pay',
-            id: b.id,
-            label: `账单#${b.id} 待收付`,
-            href: '/bills',
-          })),
-        ...spotOrders.map((o) => ({
-          type: 'spot_open',
-          id: o.id,
-          label: `现货挂单#${o.id} ${o.side}`,
-          href: '/spot',
-        })),
-      ],
     });
   } catch (e) {
     next(e);

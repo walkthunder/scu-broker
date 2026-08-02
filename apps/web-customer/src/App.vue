@@ -119,22 +119,33 @@ const showBottomNav = computed(() => route.name !== 'login');
             </router-link>
           </nav>
         </div>
-        <div class="flex items-center gap-2 text-sm sm:gap-3">
+        <div class="flex h-14 shrink-0 items-center gap-3">
           <template v-if="user">
             <router-link
               to="/account"
-              class="tap-target hidden max-w-[10rem] truncate font-mono text-xs text-slate-500 hover:text-slate-300 sm:inline"
+              class="hidden h-9 max-w-[14rem] items-center truncate font-mono text-xs leading-none text-slate-500 hover:text-slate-300 sm:inline-flex"
+              :title="user.email || user.phone || ''"
             >
               {{ user.email || user.phone }}
             </router-link>
-            <button type="button" class="btn-ghost tap-target !px-3 !py-2 text-xs" @click="logout">
+            <button
+              type="button"
+              class="inline-flex h-9 items-center justify-center rounded-sm px-3 text-xs text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-200"
+              @click="logout"
+            >
               退出
             </button>
           </template>
-          <router-link v-else to="/login" class="btn-primary tap-target !py-2 !text-xs">登录</router-link>
+          <router-link
+            v-else
+            to="/login"
+            class="inline-flex h-9 items-center justify-center rounded-sm bg-amber-500 px-3 text-xs font-medium text-slate-900 hover:bg-amber-600"
+          >
+            登录
+          </router-link>
           <button
             type="button"
-            class="tap-target inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded border border-slate-700 text-slate-300 md:hidden"
+            class="inline-flex h-9 w-9 items-center justify-center rounded border border-slate-700 text-slate-300 md:hidden"
             aria-label="更多菜单"
             :aria-expanded="moreOpen"
             @click="moreOpen = !moreOpen"

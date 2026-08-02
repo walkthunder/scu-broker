@@ -9,6 +9,7 @@ import { runMtmJob } from './mtm-statements.js';
 import { SpotBookOrder } from '../models/frd-models.js';
 import { postLedger } from './ledger.js';
 import { sequelize } from '../config/database.js';
+import { releaseCapacity } from './partner-capacity.js';
 
 export async function expireSpotOrders(now = new Date()) {
   const stale = await SpotBookOrder.findAll({
@@ -43,6 +44,9 @@ export async function expireSpotOrders(now = new Date()) {
             t,
           );
         }
+      }
+      if (order.side === 'sell' && unfilled > 0) {
+        await releaseCapacity('spot', order.sku_id, order.region, unfilled, t);
       }
       order.status = 'expired';
       await order.save({ transaction: t });

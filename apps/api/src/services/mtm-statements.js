@@ -51,10 +51,8 @@ export async function generateDailyMtmStatements(date = todayShanghai()) {
 
   for (const r of rights) {
     const { getLatestPublished: glp } = await import('./index-price.js');
-    const { PriceIndex } = await import('../models/index.js');
-    const index = await PriceIndex.findOne({
-      where: { sku_id: r.sku_id, region: r.region, status: 'active' },
-    });
+    const { resolvePrimaryIndex } = await import('./market-resolve.js');
+    const index = await resolvePrimaryIndex(r.sku_id, r.region);
     let spot = Number(r.strike);
     if (index) {
       const print = await glp(index.id, date);

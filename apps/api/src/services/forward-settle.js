@@ -124,8 +124,14 @@ export async function listPresaleOffers() {
     include: [{ association: 'sku', attributes: ['id', 'name', 'unit'] }],
     order: [['id', 'ASC']],
   });
-  const out = [];
+  // 每 SKU+区域只挂一条（与 resolvePrimaryIndex 一致：id 最小）
+  const primary = new Map();
   for (const idx of indices) {
+    const key = `${idx.sku_id}|${idx.region || 'shanghai'}`;
+    if (!primary.has(key)) primary.set(key, idx);
+  }
+  const out = [];
+  for (const idx of primary.values()) {
     const print = await getLatestPublished(idx.id);
     if (!print) continue;
     const spot = Number(print.settle_price);

@@ -250,6 +250,11 @@ async function ensureFrdColumns() {
     '`spot_fill_id` INT UNSIGNED NULL',
   );
   await ensureColumn(
+    'spot_book_orders',
+    'capacity_held',
+    '`capacity_held` TINYINT(1) NOT NULL DEFAULT 0',
+  );
+  await ensureColumn(
     'partner_capacities',
     'quote_bid',
     '`quote_bid` DECIMAL(14,4) NULL',

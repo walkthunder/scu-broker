@@ -1,6 +1,6 @@
 import { Op } from 'sequelize';
 import { RightContract } from '../models/frd-models.js';
-import { DeliveryChannel, DeliveryOrder, PriceIndex } from '../models/index.js';
+import { DeliveryChannel, DeliveryOrder } from '../models/index.js';
 import { AppError } from '../utils/errors.js';
 import { getPlatformParams } from './platform-config.js';
 import { getLatestPublished } from './index-price.js';
@@ -36,23 +36,92 @@ export function refPremium({ spot, strike, kind, days, vol, qty }) {
   };
 }
 
-export function payoffDiagram({ kind, strike, premiumUnit, spotMin, spotMax, steps = 21 }) {
-  const pts = [];
-  for (let i = 0; i < steps; i++) {
-    const S = spotMin + ((spotMax - spotMin) * i) / (steps - 1);
-    let payoff;
-    if (kind === 'call') payoff = Math.max(0, S - strike) - premiumUnit;
-    else payoff = Math.max(0, strike - S) - premiumUnit;
-    pts.push({ spot: Math.round(S * 100) / 100, pnl: Math.round(payoff * 100) / 100 });
+function unitPayoff(kind, S, strike, premiumUnit) {
+  if (kind === 'call') return Math.max(0, S - strike) - premiumUnit;
+  return Math.max(0, strike - S) - premiumUnit;
+}
+
+function round2(n) {
+  return Math.round(Number(n) * 100) / 100;
+}
+
+function moneynessOf(kind, spot, strike) {
+  if (spot == null || !(strike > 0)) return null;
+  if (kind === 'call') {
+    if (spot > strike) return 'ITM';
+    if (spot < strike) return 'OTM';
+    return 'ATM';
   }
-  const be = kind === 'call' ? strike + premiumUnit : strike - premiumUnit;
-  return { points: pts, breakeven: Math.round(be * 100) / 100 };
+  if (spot < strike) return 'ITM';
+  if (spot > strike) return 'OTM';
+  return 'ATM';
+}
+
+/**
+ * 到期损益数据（业务真相源）。前端只负责画图，不重算 K/BE/损益。
+ * 返回：points + strike/breakeven/max_loss/spot/current_pnl/moneyness
+ */
+export function payoffDiagram({
+  kind,
+  strike,
+  premiumUnit,
+  spotMin,
+  spotMax,
+  steps = 21,
+  spot = null,
+}) {
+  const K = Number(strike);
+  const prem = Number(premiumUnit) || 0;
+  if (!Number.isFinite(K) || K <= 0) {
+    return { points: [], kind };
+  }
+
+  const be = kind === 'call' ? K + prem : K - prem;
+  const spotN = spot == null || !Number.isFinite(Number(spot)) ? null : Number(spot);
+
+  let lo = Number(spotMin);
+  let hi = Number(spotMax);
+  if (!Number.isFinite(lo) || !Number.isFinite(hi) || !(hi > lo)) {
+    lo = K * 0.7;
+    hi = K * 1.3;
+  }
+  for (const x of [K, be, spotN]) {
+    if (x == null || !Number.isFinite(x)) continue;
+    lo = Math.min(lo, x);
+    hi = Math.max(hi, x);
+  }
+  const pad = Math.max((hi - lo) * 0.05, K * 0.02, 0.01);
+  lo = round2(lo - pad);
+  hi = round2(hi + pad);
+
+  const bySpot = new Map();
+  const putPt = (S) => {
+    const s = round2(S);
+    bySpot.set(s, { spot: s, pnl: round2(unitPayoff(kind, s, K, prem)) });
+  };
+  for (let i = 0; i < steps; i++) putPt(lo + ((hi - lo) * i) / (steps - 1));
+  putPt(K);
+  putPt(be);
+  if (spotN != null) putPt(spotN);
+
+  return {
+    points: [...bySpot.values()].sort((a, b) => a.spot - b.spot),
+    breakeven: round2(be),
+    strike: round2(K),
+    premium_unit: round2(prem),
+    max_loss: prem === 0 ? 0 : round2(-prem),
+    spot: spotN == null ? null : round2(spotN),
+    current_pnl: spotN == null ? null : round2(unitPayoff(kind, spotN, K, prem)),
+    moneyness: moneynessOf(kind, spotN, K),
+    spot_min: lo,
+    spot_max: hi,
+    kind,
+  };
 }
 
 async function latestSpotForSkuRegion(skuId, region) {
-  const index = await PriceIndex.findOne({
-    where: { sku_id: skuId, region, status: 'active' },
-  });
+  const { resolvePrimaryIndex } = await import('./market-resolve.js');
+  const index = await resolvePrimaryIndex(skuId, region);
   if (!index) return null;
   const print = await getLatestPublished(index.id);
   return print ? Number(print.settle_price) : null;
@@ -100,10 +169,19 @@ export async function createRight(body, brokerId) {
   if (!Number(params.rights_enabled)) throw new AppError('权益产品暂未开放', 403);
   const start = window_start || todayShanghai();
   const end = window_end || addDaysShanghai(start, Number(params.right_days));
-  const spot = (await latestSpotForSkuRegion(sku_id, region)) || Number(strike);
+  const marketSpot = await latestSpotForSkuRegion(sku_id, region);
+  const strikeN = Number(strike);
+  if (!(strikeN > 0)) throw new AppError('行权价须大于 0');
+  // 有现货时拦住错标的/烟测脏价（如 H100 上填 3）
+  if (marketSpot > 0 && (strikeN < marketSpot * 0.2 || strikeN > marketSpot * 5)) {
+    throw new AppError(
+      `行权价 ${strikeN} 相对现货 ${marketSpot} 偏离过大（允许约 0.2×～5×）`,
+    );
+  }
+  const spot = marketSpot > 0 ? marketSpot : strikeN;
   const ref = refPremium({
     spot,
-    strike: Number(strike),
+    strike: strikeN,
     kind,
     days: params.right_days,
     vol: params.vol_for_premium,
@@ -187,8 +265,18 @@ export async function confirmRightFee(id, operatorId) {
   });
 }
 
+const RIGHT_STATUS_LABEL = {
+  pending_confirm: '待确认',
+  open: '持仓中',
+  exercised: '已行权',
+  expired: '已到期',
+  cancelled: '已取消',
+};
+
 export async function presentRight(row) {
   const j = typeof row.toJSON === 'function' ? row.toJSON() : { ...row };
+  j.kind_label = j.kind === 'put' ? '认沽（保障）' : '认购（使用权）';
+  j.status_label = RIGHT_STATUS_LABEL[j.status] || j.status;
   const params = await getPlatformParams();
   const spot = await latestSpotForSkuRegion(j.sku_id, j.region);
   const unitPrem = Number(j.premium) / Math.max(Number(j.qty), 1e-9);
@@ -216,6 +304,7 @@ export async function presentRight(row) {
       premiumUnit: unitPrem,
       spotMin: Number(j.strike) * 0.7,
       spotMax: Number(j.strike) * 1.3,
+      spot,
     }),
   };
   return j;

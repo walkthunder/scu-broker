@@ -47,6 +47,8 @@
 | `scu-api.service` | systemd 单元（MemoryMax=512M） |
 | `activate.sh` | 插入 Nginx 片段、seed、启 API |
 | API `npm run db:seed:market` | 幂等回填近 N 日参考价 + 当日公告/指数/做市（不重置账号） |
+| API `npm run db:seed:spot-book` | 幂等重铺 H100·上海现货演示盘口 |
+| API `npm run db:seed:buyer-holdings` | 幂等整理买方试用预售/权益（作废脏单） |
 
 ## 更新发布（简要）
 

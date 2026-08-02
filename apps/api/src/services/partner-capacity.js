@@ -54,16 +54,19 @@ export async function consumeCapacity(kind, skuId, region, qty, transaction) {
   }
 }
 
+/** 释放产能：与 consume 同序（id ASC）加回第一行活跃产能，保证可逆 */
 export async function releaseCapacity(kind, skuId, region, qty, transaction) {
   const field = FIELD[kind];
   if (!field || !(Number(qty) > 0)) return;
-  const row = await PartnerCapacity.findOne({
+  const rows = await PartnerCapacity.findAll({
     where: { sku_id: skuId, region, active: true },
     order: [['id', 'ASC']],
     transaction,
     lock: transaction ? transaction.LOCK.UPDATE : undefined,
   });
-  if (!row) return;
+  if (!rows.length) return;
+  // 加回 id 最小行（与 FIFO consume 的首行一致），避免分散到错误伙伴
+  const row = rows[0];
   row[field] = Number(row[field]) + Number(qty);
   await row.save({ transaction });
 }

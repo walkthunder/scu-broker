@@ -104,6 +104,18 @@ describe('页面接口补全', ({ it }) => {
       },
     });
     assertOk(opened);
+    const badStrike = await req('/frd/rights/self-open', {
+      method: 'POST',
+      headers: auth(buyer.token),
+      body: {
+        kind: 'call',
+        sku_id: h100.id,
+        region: 'shanghai',
+        qty: 1,
+        strike: 3,
+      },
+    });
+    assert(badStrike.json.code !== 0, '行权价相对现货过偏应拒绝');
     const mine = await req('/frd/rights/mine', { headers: auth(buyer.token) });
     assertOk(mine);
     assert(mine.json.data.some((r) => r.id === opened.json.data.id));

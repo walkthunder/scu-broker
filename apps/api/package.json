@@ -10,6 +10,8 @@
     "db:seed": "node scripts/seed.js",
     "db:seed:market": "node scripts/seed-market.js",
     "db:seed:demo": "node scripts/seed-demo.js",
+    "db:seed:spot-book": "node scripts/seed-spot-book-demo.js",
+    "db:seed:buyer-holdings": "node scripts/seed-buyer-holdings-demo.js",
     "sandbox:forward": "node scripts/sandbox-forward.js",
     "test:functional": "node tests/run.js",
     "test": "npm run test:functional"

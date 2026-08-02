@@ -354,10 +354,14 @@ async function seed() {
       });
     }
   }
-  indexDefs.push(
-    { code: 'H100-M', name: 'H100 包月结算指数', skuName: 'H100 包月', region: 'shanghai', jump: 20 },
-    { code: 'H100-H', name: 'H100 时租结算指数', skuName: 'H100', region: 'shanghai', jump: 20 },
-  );
+  // H100 包月是另一 SKU；勿再种 H100-H（与网格 H100-SH 同 sku+region 冲突）
+  indexDefs.push({
+    code: 'H100-M',
+    name: 'H100 包月结算指数',
+    skuName: 'H100 包月',
+    region: 'shanghai',
+    jump: 20,
+  });
   const seededIndices = [];
   for (const def of indexDefs) {
     const sku = skus.find((s) => s.name === def.skuName);
@@ -417,6 +421,9 @@ async function seed() {
     }
     seededIndices.push({ idx, sku });
   }
+  const { deactivateDuplicateIndices } = await import('../src/services/market-resolve.js');
+  const dup = await deactivateDuplicateIndices();
+  if (dup) console.log(`deactivated ${dup} duplicate price indices (same sku+region)`);
 
   // 交割通道：主流 GPU 包月/时租各一条示例
   const [runze] = await Supplier.findOrCreate({
@@ -551,6 +558,19 @@ async function seed() {
   );
   await backfillMarketHistory(21, today);
   await ensureMarketDay(today);
+
+  // 试用盘口 + 买方持仓（子进程幂等；避免与本进程共享 sequelize 生命周期）
+  const { execFileSync } = await import('node:child_process');
+  const { dirname, join } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const scriptsDir = dirname(fileURLToPath(import.meta.url));
+  for (const name of ['seed-spot-book-demo.js', 'seed-buyer-holdings-demo.js']) {
+    console.log('Demo seed:', name);
+    execFileSync(process.execPath, [join(scriptsDir, name)], {
+      stdio: 'inherit',
+      env: process.env,
+    });
+  }
 
   console.log('Seed done.');
   console.log(`Admin login: ${config.admin.phone} / ${config.admin.password}`);

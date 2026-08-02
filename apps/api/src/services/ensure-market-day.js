@@ -68,6 +68,19 @@ export function bandFromMid(mid, skuType) {
   };
 }
 
+/** 非 Token 相对前日 mid 偏离过大时温和重滚（写入口唯一消毒） */
+export function rollMid(prevMid, candidate, skuType, rerollKey) {
+  let mid = Number(candidate);
+  if (!(mid > 0)) mid = Number(prevMid) || 0;
+  if (skuType !== 'token' && Number(prevMid) >= 1000) {
+    const p = Number(prevMid);
+    if (mid < p * 0.5 || mid > p * 2) {
+      mid = p * (1 + (hash01(rerollKey) - 0.5) * 0.018);
+    }
+  }
+  return mid;
+}
+
 async function systemAdminId() {
   const admin = await User.findOne({
     where: { role: 'admin' },
@@ -99,10 +112,16 @@ export async function upsertReferenceDay(date, { createdBy } = {}) {
         },
         order: [['date', 'DESC']],
       });
-      const mid = prev
+      const rolled = prev
         ? Number(prev.price_mid) *
           (1 + (hash01(`${sku.id}|${region}|${date}|roll`) - 0.5) * 0.018)
         : driftedMid(anchor, date, sku.name, region);
+      const mid = rollMid(
+        prev ? Number(prev.price_mid) : 0,
+        rolled,
+        sku.type,
+        `${sku.id}|${region}|${date}|reroll`,
+      );
       const band = bandFromMid(mid, sku.type);
       const [row, created] = await ReferencePrice.findOrCreate({
         where: { sku_id: sku.id, date, region },
@@ -119,10 +138,17 @@ export async function upsertReferenceDay(date, { createdBy } = {}) {
         upserted += 1;
         continue;
       }
-      // 已有但 mid 为空/0：补齐；已有真实录入不覆盖
-      if (!(Number(row.price_mid) > 0)) {
+      const cur = Number(row.price_mid);
+      const prevMid = prev ? Number(prev.price_mid) : 0;
+      const needsFix =
+        !(cur > 0) ||
+        (sku.type !== 'token' &&
+          prevMid >= 1000 &&
+          (cur < prevMid * 0.5 || cur > prevMid * 2));
+      // 空价或相对前日不可信：用 rollMid 结果覆盖；人工合理录入不碰
+      if (needsFix) {
         Object.assign(row, band);
-        row.source = row.source || '系统滚动';
+        row.source = cur > 0 ? '系统纠偏' : row.source || '系统滚动';
         await row.save();
         upserted += 1;
       }
@@ -164,6 +190,7 @@ export async function ensureIndexPrints(date) {
         sample_count: 0,
       },
     });
+    // 仅补未发布/无价；脏价在 upsertReferenceDay(rollMid) 处理，不在此双轨纠偏
     if (print.status !== 'published' || !(Number(print.settle_price) > 0)) {
       print.settle_price = settle;
       print.source = 'reference';
@@ -444,6 +471,10 @@ async function ensureChannelSamples(date) {
  * 启动 / 日切：保证「今天」行情大厅有真实可展示数据（幂等、不覆盖已有有效价）。
  */
 export async function ensureMarketDay(asOf = todayShanghai()) {
+  const { deactivateDuplicateIndices } = await import('./market-resolve.js');
+  await deactivateDuplicateIndices();
+  const { migrateOpenSellCapacity } = await import('./spot-book.js');
+  await migrateOpenSellCapacity();
   const refs = await upsertReferenceDay(asOf);
   const prints = await ensureIndexPrints(asOf);
   const bulletin = await ensurePublishedBulletin(asOf);
