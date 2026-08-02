@@ -195,16 +195,16 @@ function onSubmit() {
 
       <label v-if="mode !== 'login'" class="field-label">
         验证码
-        <div class="mt-1.5 flex gap-2">
+        <div class="mt-1.5 flex flex-col gap-2 sm:flex-row">
           <input
             v-model="code"
-            class="w-full font-mono"
+            class="w-full min-w-0 font-mono"
             maxlength="6"
             inputmode="numeric"
             autocomplete="one-time-code"
             required
           />
-          <button type="button" class="btn-secondary shrink-0 !px-3" :disabled="sending" @click="sendOtp">
+          <button type="button" class="btn-secondary w-full shrink-0 sm:w-auto sm:!px-3" :disabled="sending" @click="sendOtp">
             {{ sending ? '发送中…' : '获取验证码' }}
           </button>
         </div>

@@ -25,7 +25,7 @@ const stepIndex = computed(() => {
 </script>
 
 <template>
-  <div class="mx-auto max-w-6xl px-4 py-8">
+  <div class="mx-auto max-w-6xl px-4 py-6 sm:py-8">
     <div v-if="order">
       <p class="font-mono text-xs uppercase tracking-wide text-slate-500">ORDER</p>
       <h1 class="page-title mt-1">订单 #{{ order.id }}</h1>

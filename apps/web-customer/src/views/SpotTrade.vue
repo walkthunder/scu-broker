@@ -217,7 +217,7 @@ onMounted(loadMeta);
 </script>
 
 <template>
-  <div class="mx-auto max-w-6xl px-4 py-8">
+  <div class="mx-auto max-w-6xl px-4 py-6 sm:py-8">
     <div class="flex flex-wrap items-end justify-between gap-3">
       <div>
         <h1 class="page-title">现货交易台</h1>
@@ -255,7 +255,7 @@ onMounted(loadMeta);
           <div class="flex rounded-sm border border-slate-700 p-0.5 text-xs">
             <button
               type="button"
-              class="px-3 py-1.5 transition-colors"
+              class="inline-flex min-h-[44px] items-center px-3 transition-colors"
               :class="
                 form.side === 'buy'
                   ? 'bg-[var(--up)]/20 font-medium text-[var(--up)]'
@@ -267,7 +267,7 @@ onMounted(loadMeta);
             </button>
             <button
               type="button"
-              class="px-3 py-1.5 transition-colors"
+              class="inline-flex min-h-[44px] items-center px-3 transition-colors"
               :class="
                 form.side === 'sell'
                   ? 'bg-[var(--down)]/20 font-medium text-[var(--down)]'
@@ -319,7 +319,7 @@ onMounted(loadMeta);
           </label>
         </div>
         <button
-          class="mt-4 w-full rounded-sm px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
+          class="mt-4 w-full rounded-sm px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 min-h-[44px]"
           type="button"
           :class="form.side === 'buy' ? 'bg-[var(--up)]' : 'bg-[var(--down)]'"
           @click="place"
@@ -509,7 +509,7 @@ onMounted(loadMeta);
           v-if="chartGeom"
           class="h-[200px] w-full sm:h-[240px]"
           :viewBox="`0 0 ${CHART_W} ${CHART_H}`"
-          preserveAspectRatio="none"
+          preserveAspectRatio="xMidYMid meet"
           role="img"
           :aria-label="`结算价走势，最新 ${fmtPrice(lastSettle)}`"
         >

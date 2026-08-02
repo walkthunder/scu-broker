@@ -440,7 +440,7 @@ function scrollToMarket() {
                 </div>
                 <button
                   type="button"
-                  class="btn-primary !min-h-[40px] !px-3 !py-2 !text-xs"
+                  class="btn-primary !px-3 !text-xs"
                   @click="goRfq(row.sku_id, 'table')"
                 >
                   询价

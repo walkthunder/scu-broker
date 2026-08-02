@@ -21,6 +21,7 @@
   html {
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
+    overflow-x: clip;
   }
 
   body {
@@ -28,6 +29,19 @@
     background: var(--bg);
     color: var(--text);
     font-family: 'IBM Plex Sans', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    overflow-x: clip;
+    max-width: 100vw;
+  }
+
+  #app,
+  .app-shell {
+    min-width: 0;
+    max-width: 100vw;
+    overflow-x: clip;
+  }
+
+  .app-main {
+    min-width: 0;
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -82,6 +96,12 @@
 
   .app-main.has-bottom-nav {
     padding-bottom: calc(var(--bottom-nav-h) + var(--safe-bottom) + 12px);
+  }
+
+  @media (min-width: 1024px) {
+    .app-main.has-bottom-nav {
+      padding-bottom: 1.5rem;
+    }
   }
 
   .bottom-nav {

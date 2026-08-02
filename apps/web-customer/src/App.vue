@@ -29,22 +29,33 @@ const NAV_MATCH = {
   about: ['about'],
 };
 
-const BOTTOM_TABS = [
+/** 移动底栏 ≤5；桌面顶栏再追加控制台/账单/保障 */
+const PRIMARY_TABS = [
   { name: 'prices', label: '行情', to: { name: 'prices' } },
   { name: 'spot', label: '现货', to: { name: 'spot' } },
   { name: 'rfq', label: '询价', to: { name: 'rfq' } },
   { name: 'forwards', label: '预售', to: { name: 'forwards' } },
   { name: 'rights', label: '权益', to: { name: 'rights' } },
+];
+
+const DESKTOP_EXTRA = [
   { name: 'console', label: '控制台', to: { name: 'console' } },
+  { name: 'bills', label: '账单', to: { name: 'bills' } },
+  { name: 'about', label: '保障', to: { name: 'about' } },
 ];
 
 const MORE_LINKS = [
+  { to: '/console', label: '控制台', auth: true },
   { to: '/indices', label: '指数' },
-  { to: '/bills', label: '账单' },
+  { to: '/bills', label: '账单', auth: true },
   { to: '/mine', label: '订单', auth: true },
   { to: '/about', label: '保障' },
   { to: '/account', label: '账号', auth: true },
 ];
+
+const moreLinksVisible = computed(() =>
+  MORE_LINKS.filter((l) => !l.auth || user.value),
+);
 
 function isActive(name) {
   return (NAV_MATCH[name] || [name]).includes(route.name);
@@ -52,7 +63,7 @@ function isActive(name) {
 
 function navClass(name) {
   return [
-    'tap-target cursor-pointer whitespace-nowrap border-b-2 px-1 py-3 text-sm transition-colors duration-200',
+    'inline-flex h-14 items-center whitespace-nowrap border-b-2 px-1 text-sm transition-colors duration-200',
     isActive(name)
       ? 'border-amber-500 font-medium text-slate-100'
       : 'border-transparent text-slate-400 hover:border-slate-600 hover:text-slate-200',
@@ -61,7 +72,7 @@ function navClass(name) {
 
 function tabClass(name) {
   return [
-    'tap-target flex min-h-[48px] flex-1 flex-col items-center justify-center gap-0.5 text-[11px] transition-colors duration-200',
+    'flex min-h-[48px] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 text-[11px] transition-colors duration-200',
     isActive(name) ? 'text-amber-400' : 'text-slate-500',
   ];
 }
@@ -81,18 +92,18 @@ const showBottomNav = computed(() => route.name !== 'login');
       class="sticky top-0 z-30 border-b border-slate-700 bg-slate-950/95 backdrop-blur"
       style="padding-top: env(safe-area-inset-top)"
     >
-      <div class="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4">
-        <div class="flex min-w-0 items-center gap-4 md:gap-8">
-          <router-link to="/" class="tap-target flex shrink-0 items-center gap-2 py-3">
+      <div class="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4">
+        <div class="flex min-w-0 items-center gap-4 lg:gap-6">
+          <router-link to="/" class="flex h-14 shrink-0 items-center gap-2">
             <span class="inline-block h-5 w-1 bg-amber-500" aria-hidden="true" />
             <span class="font-mono text-sm font-semibold tracking-[0.12em] text-slate-100 uppercase">
               CompriX
             </span>
           </router-link>
-          <!-- 桌面顶栏导航 -->
-          <nav class="hidden items-center gap-5 md:flex" aria-label="主导航">
+          <!-- 桌面顶栏：lg 起展示，避免 md 宽度挤爆 -->
+          <nav class="hidden items-center gap-4 lg:flex" aria-label="主导航">
             <router-link
-              v-for="t in BOTTOM_TABS"
+              v-for="t in PRIMARY_TABS"
               :key="t.name"
               :to="t.to"
               active-class=""
@@ -102,35 +113,29 @@ const showBottomNav = computed(() => route.name !== 'login');
               {{ t.label }}
             </router-link>
             <router-link
-              :to="{ name: 'bills' }"
+              v-for="t in DESKTOP_EXTRA"
+              :key="t.name"
+              :to="t.to"
               active-class=""
               exact-active-class=""
-              :class="navClass('bills')"
+              :class="navClass(t.name)"
             >
-              账单
-            </router-link>
-            <router-link
-              :to="{ name: 'about' }"
-              active-class=""
-              exact-active-class=""
-              :class="navClass('about')"
-            >
-              保障
+              {{ t.label }}
             </router-link>
           </nav>
         </div>
-        <div class="flex h-14 shrink-0 items-center gap-3">
+        <div class="flex h-14 shrink-0 items-center gap-2 sm:gap-3">
           <template v-if="user">
             <router-link
               to="/account"
-              class="hidden h-9 max-w-[14rem] items-center truncate font-mono text-xs leading-none text-slate-500 hover:text-slate-300 sm:inline-flex"
+              class="hidden h-11 max-w-[14rem] items-center truncate font-mono text-xs leading-none text-slate-500 hover:text-slate-300 sm:inline-flex"
               :title="user.email || user.phone || ''"
             >
               {{ user.email || user.phone }}
             </router-link>
             <button
               type="button"
-              class="inline-flex h-9 items-center justify-center rounded-sm px-3 text-xs text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-200"
+              class="inline-flex h-11 items-center justify-center rounded-sm px-3 text-xs text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-200"
               @click="logout"
             >
               退出
@@ -139,13 +144,13 @@ const showBottomNav = computed(() => route.name !== 'login');
           <router-link
             v-else
             to="/login"
-            class="inline-flex h-9 items-center justify-center rounded-sm bg-amber-500 px-3 text-xs font-medium text-slate-900 hover:bg-amber-600"
+            class="inline-flex h-11 items-center justify-center rounded-sm bg-amber-500 px-3 text-xs font-medium text-slate-900 hover:bg-amber-600"
           >
             登录
           </router-link>
           <button
             type="button"
-            class="inline-flex h-9 w-9 items-center justify-center rounded border border-slate-700 text-slate-300 md:hidden"
+            class="inline-flex h-11 w-11 items-center justify-center rounded border border-slate-700 text-slate-300 lg:hidden"
             aria-label="更多菜单"
             :aria-expanded="moreOpen"
             @click="moreOpen = !moreOpen"
@@ -154,17 +159,16 @@ const showBottomNav = computed(() => route.name !== 'login');
           </button>
         </div>
       </div>
-      <!-- 移动端更多：账单 / 保障 / 账号 -->
       <div
         v-if="moreOpen"
-        class="border-t border-slate-800 bg-slate-900 px-4 py-3 md:hidden"
+        class="border-t border-slate-800 bg-slate-900 px-4 py-3 lg:hidden"
       >
         <div class="flex flex-wrap gap-2">
           <router-link
-            v-for="l in MORE_LINKS"
+            v-for="l in moreLinksVisible"
             :key="l.to"
             :to="l.to"
-            class="tap-target rounded border border-slate-700 px-3 py-2 text-sm text-slate-300"
+            class="inline-flex min-h-[44px] items-center rounded border border-slate-700 px-3 text-sm text-slate-300"
             @click="moreOpen = false"
           >
             {{ l.label }}
@@ -177,14 +181,13 @@ const showBottomNav = computed(() => route.name !== 'login');
       <router-view :key="route.fullPath" />
     </main>
 
-    <!-- 移动端底栏：≤5 主入口（ui-ux-pro-max） -->
     <nav
       v-if="showBottomNav"
-      class="bottom-nav md:hidden"
+      class="bottom-nav lg:hidden"
       aria-label="底部导航"
     >
       <router-link
-        v-for="t in BOTTOM_TABS"
+        v-for="t in PRIMARY_TABS"
         :key="t.name"
         :to="t.to"
         active-class=""
@@ -196,7 +199,7 @@ const showBottomNav = computed(() => route.name !== 'login');
           :class="isActive(t.name) ? 'bg-amber-500' : 'bg-transparent'"
           aria-hidden="true"
         />
-        <span>{{ t.label }}</span>
+        <span class="max-w-full truncate">{{ t.label }}</span>
       </router-link>
     </nav>
   </div>

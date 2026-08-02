@@ -122,7 +122,7 @@ onMounted(load);
 </script>
 
 <template>
-  <div class="mx-auto max-w-6xl px-4 py-8">
+  <div class="mx-auto max-w-6xl px-4 py-6 sm:py-8">
     <h1 class="page-title">我的权益</h1>
     <p class="page-desc">30 天认购（优先使用权）/ 认沽（回售保障）· 可自助买入 · 展示 IV/TV 参考</p>
     <p v-if="msg" class="mt-2 text-sm text-emerald-400">{{ msg }}</p>
@@ -160,10 +160,15 @@ onMounted(load);
           <input v-model.number="form.qty" type="number" min="0.01" step="0.01" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm" @change="refreshPremium" />
         </label>
       </div>
-      <p v-if="premiumHint" class="mt-2 text-xs text-slate-400">
-        参考权利金 {{ premiumHint.premium_ref }} · IV≈{{ premiumHint.iv }}% · TV {{ premiumHint.tv }} · 内在
-        {{ premiumHint.intrinsic }} · Δ≈{{ premiumHint.delta }}
-        <button type="button" class="ml-2 text-amber-400 underline" @click="refreshPremium">刷新</button>
+      <p v-if="premiumHint" class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-400">
+        <span>参考权利金 {{ premiumHint.premium_ref }}</span>
+        <span>IV≈{{ premiumHint.iv }}%</span>
+        <span>TV {{ premiumHint.tv }}</span>
+        <span>内在 {{ premiumHint.intrinsic }}</span>
+        <span>Δ≈{{ premiumHint.delta }}</span>
+        <button type="button" class="inline-flex min-h-[44px] items-center text-amber-400 underline" @click="refreshPremium">
+          刷新
+        </button>
       </p>
       <button type="button" class="btn-primary mt-3 text-sm" @click="selfBuy">提交买入</button>
     </div>

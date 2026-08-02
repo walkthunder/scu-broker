@@ -76,16 +76,16 @@ function go(path) {
 </script>
 
 <template>
-  <div class="mx-auto max-w-6xl px-4 py-8">
+  <div class="mx-auto max-w-6xl px-4 py-6 sm:py-8">
     <div class="flex flex-wrap items-end justify-between gap-3">
-      <div>
+      <div class="min-w-0">
         <h1 class="page-title">控制台</h1>
         <p class="page-desc">资金 · 待办 · 持仓 · 结算价</p>
       </div>
       <div class="flex flex-wrap gap-2">
-        <button type="button" class="btn-secondary !py-1.5 !text-xs" @click="go('/spot')">现货</button>
-        <button type="button" class="btn-secondary !py-1.5 !text-xs" @click="go('/forwards')">预售</button>
-        <button type="button" class="btn-primary !py-1.5 !text-xs" @click="go('/rfq')">询价</button>
+        <button type="button" class="btn-secondary !text-xs" @click="go('/spot')">现货</button>
+        <button type="button" class="btn-secondary !text-xs" @click="go('/forwards')">预售</button>
+        <button type="button" class="btn-primary !text-xs" @click="go('/rfq')">询价</button>
       </div>
     </div>
 
@@ -98,26 +98,26 @@ function go(path) {
       >
         <div class="bg-slate-900 px-4 py-4">
           <div class="font-mono text-[10px] uppercase tracking-wider text-slate-500">可用资金</div>
-          <div class="mt-2 font-mono text-2xl font-semibold tabular-nums text-amber-400">
+          <div class="mt-2 truncate font-mono text-xl font-semibold tabular-nums text-amber-400 sm:text-2xl">
             {{ fmtMoney(ledger?.available) }}
           </div>
         </div>
         <div class="bg-slate-900 px-4 py-4">
           <div class="font-mono text-[10px] uppercase tracking-wider text-slate-500">冻结资金</div>
-          <div class="mt-2 font-mono text-2xl font-semibold tabular-nums text-slate-100">
+          <div class="mt-2 truncate font-mono text-xl font-semibold tabular-nums text-slate-100 sm:text-2xl">
             {{ fmtMoney(ledger?.frozen) }}
           </div>
         </div>
         <div class="bg-slate-900 px-4 py-4">
           <div class="font-mono text-[10px] uppercase tracking-wider text-slate-500">预售浮动盈亏</div>
-          <div class="mt-2 font-mono text-2xl font-semibold tabular-nums" :class="signedClass(forwardMtm)">
+          <div class="mt-2 truncate font-mono text-xl font-semibold tabular-nums sm:text-2xl" :class="signedClass(forwardMtm)">
             {{ signedText(forwardMtm) }}
           </div>
           <p class="mt-1 text-[11px] text-slate-600">按近结 S 估算，非最终结算</p>
         </div>
         <div class="bg-slate-900 px-4 py-4">
           <div class="font-mono text-[10px] uppercase tracking-wider text-slate-500">待办</div>
-          <div class="mt-2 font-mono text-2xl font-semibold tabular-nums text-slate-100">
+          <div class="mt-2 font-mono text-xl font-semibold tabular-nums text-slate-100 sm:text-2xl">
             {{ todos.length }}
           </div>
         </div>
@@ -153,7 +153,7 @@ function go(path) {
             </div>
             <button
               type="button"
-              class="btn-primary !min-h-0 shrink-0 !px-3 !py-1.5 !text-xs"
+              class="btn-primary shrink-0 !px-3 !text-xs"
               @click="go(t.href)"
             >
               {{ t.cta || '前往' }}

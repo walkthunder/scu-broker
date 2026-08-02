@@ -30,7 +30,7 @@ function changeClass(pct) {
 </script>
 
 <template>
-  <div class="mx-auto max-w-6xl px-4 py-8">
+  <div class="mx-auto max-w-6xl px-4 py-6 sm:py-8">
     <p v-if="err" class="text-sm text-red-400">{{ err }}</p>
     <template v-else-if="sku">
       <p class="font-mono text-xs uppercase tracking-wider text-slate-500">{{ sku.type }} · {{ sku.unit }}</p>

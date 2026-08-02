@@ -221,7 +221,7 @@ onMounted(load);
 </script>
 
 <template>
-  <div class="mx-auto max-w-6xl px-4 py-8">
+  <div class="mx-auto max-w-6xl px-4 py-6 sm:py-8">
     <h1 class="page-title">我的远期持仓</h1>
     <p class="page-desc">
       可自助买入预售（对手方为平台默认卖方）；待确认需双方确认后生效；浮动盈亏按最新已发布 S 估算（对本方），非最终结算。
@@ -281,11 +281,11 @@ onMounted(load);
             v-for="o in offers"
             :key="o.index_id"
             type="button"
-            class="flex w-full items-center justify-between rounded border border-slate-800 bg-slate-950/40 px-3 py-2 text-left hover:border-amber-500/40"
+            class="flex w-full min-h-[44px] items-center justify-between gap-3 rounded border border-slate-800 bg-slate-950/40 px-3 py-2.5 text-left hover:border-amber-500/40"
             @click="pickOffer(o)"
           >
-            <div>
-              <div class="text-sm text-slate-100">{{ o.code }} · {{ o.sku?.name }} · {{ o.region }}</div>
+            <div class="min-w-0">
+              <div class="truncate text-sm text-slate-100">{{ o.code }} · {{ o.sku?.name }} · {{ o.region }}</div>
               <div class="mt-0.5 text-xs text-slate-500">
                 现货 S {{ o.spot_settle }} · 建议 X {{ o.strike_suggest }}（{{ o.strike_low }}–{{ o.strike_high }}）·
                 到期 {{ o.expiry_suggest }}
@@ -351,7 +351,7 @@ onMounted(load);
             <button
               v-if="canConfirm(row)"
               type="button"
-              class="btn-primary !min-h-[40px] !px-3 !py-2 !text-xs"
+              class="btn-primary !px-3 !text-xs"
               @click="confirm(row)"
             >
               确认
@@ -359,7 +359,7 @@ onMounted(load);
             <button
               v-if="canSetIntent(row)"
               type="button"
-              class="btn-secondary !min-h-[40px] !px-3 !py-2 !text-xs"
+              class="btn-secondary !px-3 !text-xs"
               @click="setIntent(row, 'cash')"
             >
               意愿·现金
@@ -367,7 +367,7 @@ onMounted(load);
             <button
               v-if="canSetIntent(row)"
               type="button"
-              class="btn-secondary !min-h-[40px] !px-3 !py-2 !text-xs"
+              class="btn-secondary !px-3 !text-xs"
               @click="setIntent(row, 'physical')"
             >
               意愿·实物
@@ -375,7 +375,7 @@ onMounted(load);
             <button
               v-if="canRequestDelivery(row)"
               type="button"
-              class="btn-secondary !min-h-[40px] !px-3 !py-2 !text-xs"
+              class="btn-secondary !px-3 !text-xs"
               @click="openDelivery(row)"
             >
               申请交割

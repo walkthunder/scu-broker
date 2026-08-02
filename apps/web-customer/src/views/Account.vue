@@ -38,7 +38,7 @@ async function submit() {
 </script>
 
 <template>
-  <div class="mx-auto max-w-md px-4 py-8">
+  <div class="mx-auto max-w-md px-4 py-6 sm:py-8">
     <h1 class="page-title">账号</h1>
     <p class="page-desc">
       {{ currentUser?.email || '—' }}
