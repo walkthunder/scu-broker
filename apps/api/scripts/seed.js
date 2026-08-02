@@ -482,6 +482,7 @@ async function seed() {
     await buyer.save();
     await adminDeposit(buyer.id, 2_000_000, admin.id, '种子入账');
   }
+  // 卖方演示入金由 seed-buyer-holdings-demo 幂等补齐（避免重复 seed 叠账）
 
   const partnerPass = await bcrypt.hash('partner123', 10);
   const [partnerUser] = await User.findOrCreate({

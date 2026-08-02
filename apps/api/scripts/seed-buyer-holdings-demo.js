@@ -1,10 +1,10 @@
 /**
- * 整理试用买方 buyer@comprix.local 的持仓演示数据（幂等）。
- * - 作废脏权益 / 脏预售（错标的、错锁价）
- * - 确保一笔 H100·上海 预售持仓 + 一笔 H100 认购待确认
+ * 整理试用客户持仓演示数据（幂等）。
+ * - 买方：作废脏权益/预售；确保 H100·上海预售持仓 + H100 认购待确认
+ * - 卖方：若账本接近空，补演示入金（卖侧确认/挂单观感正常）
  * - 过期询价 SLA 顺延
  *
- * 用法：cd apps/api && node scripts/seed-buyer-holdings-demo.js
+ * 用法：cd apps/api && npm run db:seed:buyer-holdings
  */
 import { Op } from 'sequelize';
 import { sequelize } from '../src/config/database.js';
@@ -18,7 +18,7 @@ import {
 import { RightContract } from '../src/models/frd-models.js';
 import { assertForwardTransition } from '../src/services/forward-state.js';
 import { releaseCapacity } from '../src/services/partner-capacity.js';
-import { postLedger } from '../src/services/ledger.js';
+import { postLedger, getBuyingPower, adminDeposit } from '../src/services/ledger.js';
 import { resolvePrimaryIndex } from '../src/services/market-resolve.js';
 import { getLatestPublished } from '../src/services/index-price.js';
 import { suggestPresalePrice } from '../src/services/index-engine.js';
@@ -120,7 +120,17 @@ function rightLooksGood(r, spot) {
 async function main() {
   const buyer = await User.findOne({ where: { email: BUYER_EMAIL } });
   const seller = await User.findOne({ where: { email: 'seller@comprix.local' } });
-  if (!buyer || !seller) throw new Error('缺少 buyer/seller');
+  const admin = await User.findOne({ where: { role: 'admin' }, order: [['id', 'ASC']] });
+  if (!buyer || !seller || !admin) throw new Error('缺少 buyer/seller/admin');
+
+  // 卖方种子曾无入金：控制台 0/0 易被误认为坏账；补一笔演示资金（幂等）
+  const sellerBp = await getBuyingPower(seller.id);
+  if (sellerBp.total < 10_000) {
+    await adminDeposit(seller.id, 500_000, admin.id, '试用卖方演示入金');
+    console.log('seller deposit 500000');
+  } else {
+    console.log('keep seller ledger', sellerBp);
+  }
 
   const index = await resolvePrimaryIndex(H100_SKU, REGION);
   if (!index) throw new Error('缺少 H100 主指数');
