@@ -1,0 +1,117 @@
+# 仅在 dev-website-deploy 上、apps/website 有变更时打包官网，并同步到阿里云 OSS。
+# 密钥放在仓库 Settings → Secrets and variables → Actions，不要写进本文件。
+#
+# Secrets:
+#   OSS_ACCESS_KEY_ID
+#   OSS_ACCESS_KEY_SECRET
+# Variables（可省略，默认见下方脚本）:
+#   OSS_BUCKET            默认 scu-broker-web
+#   OSS_REGION            默认 cn-hangzhou
+#   OSS_WEBSITE_PREFIX    默认 website。禁止空前缀和 scu，避免删掉客户前台、后台、伙伴门户
+#   VITE_WEBSITE_BASE     默认 /<前缀>/
+#   VITE_CUSTOMER_URL     默认 https://computx.webinfra.cloud/scu/
+#   VITE_PARTNER_URL      默认 https://computx.webinfra.cloud/scu/partner/
+
+name: 官网同步到阿里云 OSS
+
+on:
+  push:
+    branches:
+      - dev-website-deploy
+    paths:
+      - 'apps/website/**'
+      - '.github/workflows/website-oss.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: website-oss-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      OSS_BUCKET: ${{ vars.OSS_BUCKET }}
+      OSS_REGION: ${{ vars.OSS_REGION }}
+      OSS_WEBSITE_PREFIX: ${{ vars.OSS_WEBSITE_PREFIX }}
+      VITE_BASE: ${{ vars.VITE_WEBSITE_BASE }}
+      VITE_CUSTOMER_URL: ${{ vars.VITE_CUSTOMER_URL }}
+      VITE_PARTNER_URL: ${{ vars.VITE_PARTNER_URL }}
+    steps:
+      - name: 取出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/website/package-lock.json
+
+      - name: 按 OSS 目录确定站点路径并打包
+        working-directory: apps/website
+        run: |
+          set -euo pipefail
+          prefix="${OSS_WEBSITE_PREFIX:-website}"
+          prefix="${prefix#/}"
+          prefix="${prefix%/}"
+          case "$prefix" in
+            ""|scu|scu/*)
+              echo "OSS_WEBSITE_PREFIX 不能为空，也不能是 scu。官网只同步到独立目录。" >&2
+              exit 1
+              ;;
+          esac
+          if [ -z "${VITE_BASE}" ]; then
+            VITE_BASE="/${prefix}/"
+          fi
+          if [ -z "${VITE_CUSTOMER_URL}" ]; then
+            VITE_CUSTOMER_URL="https://computx.webinfra.cloud/scu/"
+          fi
+          if [ -z "${VITE_PARTNER_URL}" ]; then
+            VITE_PARTNER_URL="https://computx.webinfra.cloud/scu/partner/"
+          fi
+          export VITE_BASE VITE_CUSTOMER_URL VITE_PARTNER_URL
+          echo "VITE_BASE=${VITE_BASE}"
+          npm ci
+          npm run build
+          test -f dist/index.html
+
+      - name: 安装 ossutil 2
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/ossutil.zip https://gosspublic.alicdn.com/ossutil/v2/2.4.1/ossutil-2.4.1-linux-amd64.zip
+          echo "57ee4c56796a40144acd6b0b96b53b4ba75e5cec09c01d8d0313c09a5524022f  /tmp/ossutil.zip" | sha256sum -c -
+          unzip -q /tmp/ossutil.zip -d /tmp/ossutil
+          sudo mv /tmp/ossutil/ossutil-2.4.1-linux-amd64/ossutil /usr/local/bin/ossutil
+          sudo chmod 755 /usr/local/bin/ossutil
+          ossutil version
+
+      - name: 同步构建结果到 OSS
+        env:
+          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "${OSS_ACCESS_KEY_ID}" ] || [ -z "${OSS_ACCESS_KEY_SECRET}" ]; then
+            echo "请在 GitHub Actions Secrets 中配置 OSS_ACCESS_KEY_ID 和 OSS_ACCESS_KEY_SECRET。" >&2
+            exit 1
+          fi
+          bucket="${OSS_BUCKET:-scu-broker-web}"
+          region="${OSS_REGION:-cn-hangzhou}"
+          prefix="${OSS_WEBSITE_PREFIX:-website}"
+          prefix="${prefix#/}"
+          prefix="${prefix%/}"
+          case "$prefix" in
+            ""|scu|scu/*)
+              echo "OSS_WEBSITE_PREFIX 不能为空，也不能是 scu。官网只同步到独立目录。" >&2
+              exit 1
+              ;;
+          esac
+          export OSS_REGION="$region"
+          dest="oss://${bucket}/${prefix}/"
+          echo "同步到 ${dest}"
+          ossutil sync apps/website/dist/ "$dest" --delete -f
+          ossutil stat "oss://${bucket}/${prefix}/index.html"
