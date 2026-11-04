@@ -242,7 +242,6 @@ export const articles = [
     slug: 'settlement-price',
     title: '结算价 S 从哪来',
     summary: '渠道样本可以参与测算，对外生效的是双人复核后的价格公告。',
-    minutes: '4 分钟',
     paragraphs: [
       '硅元引擎 把某一天、某一个指数的结算价记为 S。它锚定具体 SKU 和区域，例如 H100 在上海，而不是一笼统的“显卡价格”。',
       '渠道成交可以进入价格发现引擎，算出一个供复核的结果。这个结果还不是结算价。两名不同账号要分别提交和复核，公告发布之后，客户前台和控制台才能把它当作当天的 S。',
@@ -254,7 +253,6 @@ export const articles = [
     slug: 'cash-settlement',
     title: '远期如何用现金把成本拉回约定价格',
     summary: '约定到期价格 X，到期对照结算价 S。涨和跌都用差价处理，主路径不搬机器。',
-    minutes: '4 分钟',
     paragraphs: [
       '买方和卖方先约定到期价格 X。到期日，平台给出已经公告的结算价 S。两边结算的是差价，不是必须把卡从一处机房搬到另一处。',
       '如果价格上涨，例如 S 高于 X，卖方补偿买方差价。买方可以用这笔补偿按当时的市价继续购买，综合下来接近当初约定的 X。',
@@ -266,7 +264,6 @@ export const articles = [
     slug: 'rfq-not-exchange',
     title: '为什么询价不做成自动连续竞价',
     summary: '线下谈妥，系统负责记住状态、报价、财务和脱敏动态。',
-    minutes: '3 分钟',
     paragraphs: [
       '算力采购常常带区域、账期、交付和验收条件，不适合被假装成一条永不间断的公开订单簿。硅元引擎 当前阶段不做自动连续竞价。',
       '客户先看参考价和指数，再提交结构化询价。经纪给出正式报价，客户在时限内确认或拒绝。确认后的订单按待签约、待交付、待验收、待结算推进，每一步留下日志。',
@@ -278,7 +275,6 @@ export const articles = [
     slug: 'how-to-read-index',
     title: '怎么阅读一条指数',
     summary: '先看代码里的标的和区域，再看计价单位，最后到客户前台核对已发布的 S。',
-    minutes: '3 分钟',
     paragraphs: [
       '指数代码把标的和区域写在一起。H100-SH 是 H100、上海；TK-NM 是算力 Token、内蒙。同名芯片在不同区域不是同一条指数。',
       '计价单位跟着 SKU 走。H100、H200、PPU 按台·月，算力 Token 按百万 token，H100 包月这条兼容口径按月。比较之前要先确认单位，不能把小时价和包月价放在一根轴上。',
@@ -290,6 +286,17 @@ export const articles = [
 
 export function findArticle(slug) {
   return articles.find((item) => item.slug === slug);
+}
+
+/** 成年人默读说明文字约 400 字/分钟。计入标题、摘要和正文里的非空白字符。 */
+const CHARS_PER_MINUTE = 400;
+
+export function readingLabel(article) {
+  const text = [article.title, article.summary, ...article.paragraphs].join('');
+  const count = text.replace(/\s/g, '').length;
+  const minutes = count / CHARS_PER_MINUTE;
+  if (minutes < 1) return '不到 1 分钟';
+  return `${Math.ceil(minutes)} 分钟`;
 }
 
 export const principles = [

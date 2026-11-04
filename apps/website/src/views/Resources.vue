@@ -1,6 +1,6 @@
 <script setup>
 import PageHeader from '../components/PageHeader.vue';
-import { articles } from '../data/site';
+import { articles, readingLabel } from '../data/site';
 </script>
 
 <template>
@@ -17,7 +17,7 @@ import { articles } from '../data/site';
         :to="`/resources/${article.slug}`"
         class="rounded-2xl border border-line bg-card p-6 hover:border-dim"
       >
-        <p class="text-xs text-mute">{{ article.minutes }}</p>
+        <p class="text-xs text-mute">{{ readingLabel(article) }}</p>
         <h2 class="mt-3 text-2xl font-semibold">{{ article.title }}</h2>
         <p class="mt-3 text-sm leading-6 text-dim">{{ article.summary }}</p>
       </RouterLink>

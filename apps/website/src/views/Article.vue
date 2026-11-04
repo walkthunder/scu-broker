@@ -1,7 +1,7 @@
 <script setup>
 import { computed, watchEffect } from 'vue';
 import { useRoute } from 'vue-router';
-import { findArticle } from '../data/site';
+import { findArticle, readingLabel } from '../data/site';
 
 const route = useRoute();
 const article = computed(() => findArticle(route.params.slug));
@@ -15,7 +15,7 @@ watchEffect(() => {
   <main class="shell py-12">
     <template v-if="article">
       <RouterLink to="/resources" class="text-sm text-mute hover:text-gold">资源</RouterLink>
-      <p class="mt-6 text-sm text-gold">{{ article.minutes }}</p>
+      <p class="mt-6 text-sm text-gold">{{ readingLabel(article) }}</p>
       <h1 class="mt-3 max-w-3xl text-4xl font-semibold tracking-tight">{{ article.title }}</h1>
       <p class="mt-4 max-w-2xl text-dim">{{ article.summary }}</p>
       <div class="mt-8 max-w-3xl space-y-5">
