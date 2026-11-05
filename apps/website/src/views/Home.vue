@@ -21,7 +21,7 @@ function goStart() {
 <template>
   <main>
     <section class="border-b border-line">
-      <div class="shell grid items-start gap-10 py-14 lg:grid-cols-[1.15fr_0.85fr] lg:py-20">
+      <div class="shell grid min-w-0 items-start gap-10 py-14 lg:grid-cols-[1.15fr_0.85fr] lg:py-20">
         <div>
           <p class="text-sm font-medium text-gold">算力市场情报</p>
           <h1 class="mt-4 text-5xl font-semibold leading-[1.08] tracking-tight sm:text-6xl">

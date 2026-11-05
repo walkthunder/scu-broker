@@ -35,7 +35,7 @@ const rows = computed(() => {
 </script>
 
 <template>
-  <section class="rounded-2xl border border-line bg-card shadow-card">
+  <section class="min-w-0 max-w-full rounded-2xl border border-line bg-card shadow-card">
     <div class="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3">
       <button
         v-for="item in tabs"
