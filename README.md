@@ -17,6 +17,7 @@ apps/api           Express + Sequelize + MySQL / MariaDB
 apps/web-customer  Vue3 + Tailwind（客户行情大厅）
 apps/web-admin     Vue3 + Element Plus（Broker/Admin）
 apps/web-partner   Vue3 + Element Plus（供给伙伴门户）
+apps/website       Vue3 + Tailwind（营销官网）
 deploy/            生产 Nginx / systemd / 低内存 MariaDB 片段
 docker-compose.yml 本地 MySQL + API + Nginx
 docs/              产品设计与需求、开发规范
@@ -43,6 +44,7 @@ plane/             Plane 台账
 | 客户前台 | http://localhost:5173/ |
 | 管理后台 | http://localhost:5174/admin/ |
 | 伙伴门户 | http://localhost:5175/partner/ |
+| 营销官网 | http://localhost:5176/ |
 | API | http://localhost:3000/api/health |
 | Docker 一键 | http://localhost:8080/ 与 http://localhost:8080/admin/ |
 
@@ -79,6 +81,9 @@ cd apps/web-admin && npm install && npm run dev
 
 # 5) 伙伴门户 http://localhost:5175/partner/
 cd apps/web-partner && npm install && npm run dev
+
+# 6) 营销官网 http://localhost:5176
+cd apps/website && npm install && npm run dev
 ```
 
 前台：指数、现货挂单、持仓/预售、权益、控制台、账单、账号。后台：价格发现、指数、远期、认购认沽、CRM、交割、风控、伙伴。
