@@ -50,8 +50,8 @@ jobs:
           prefix="${OSS_WEBSITE_PREFIX#/}"
           prefix="${prefix%/}"
           case "$prefix" in
-            ""|scu|scu/admin|scu/admin/*|scu/partner|scu/partner/*)
-              echo "官网 OSS 前缀不能为空，也不能覆盖 scu、scu/admin 或 scu/partner。" >&2
+            ""|scu|scu/customer|scu/customer/*|scu/admin|scu/admin/*|scu/partner|scu/partner/*)
+              echo "官网 OSS 前缀不能为空，也不能覆盖 scu、scu/customer、scu/admin 或 scu/partner。" >&2
               exit 1
               ;;
           esac
@@ -85,8 +85,8 @@ jobs:
           prefix="${OSS_WEBSITE_PREFIX#/}"
           prefix="${prefix%/}"
           case "$prefix" in
-            ""|scu|scu/admin|scu/admin/*|scu/partner|scu/partner/*)
-              echo "官网 OSS 前缀不能为空，也不能覆盖 scu、scu/admin 或 scu/partner。" >&2
+            ""|scu|scu/customer|scu/customer/*|scu/admin|scu/admin/*|scu/partner|scu/partner/*)
+              echo "官网 OSS 前缀不能为空，也不能覆盖 scu、scu/customer、scu/admin 或 scu/partner。" >&2
               exit 1
               ;;
           esac
@@ -94,4 +94,4 @@ jobs:
           dest="oss://${bucket}/${prefix}/"
           echo "同步到 ${dest}"
           ossutil sync apps/website/dist/ "$dest" --delete -f
-          ossutil stat "oss://${bucket}/${prefix}/index.html"
+          ossutil ls "oss://${bucket}/${prefix}/index.html" | grep -F "oss://${bucket}/${prefix}/index.html"
