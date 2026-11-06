@@ -1,0 +1,195 @@
+# 仅在 dev-api-deploy 上、apps/api 有变更时同步 API 到阿里云 ECS 并重启 scu-api。
+# 服务器路径与 systemd 单元沿用 deploy/。密钥放在仓库 Settings → Secrets and variables → Actions → Secrets，不要写进本文件。
+#
+# 数据库五项由本次发布写入服务器 /opt/scu-broker/apps/api/.env，只覆盖这五项。
+# PORT、JWT_SECRET、UPLOAD_DIR 等仍留在该文件里，rsync 排除 .env，不会覆盖。
+# 该文件需事先存在，且 scu-api.service 的 EnvironmentFile 指向它。
+#
+# Secrets:
+#   ECS_HOST
+#   ECS_USER              需能写入上述 .env，并执行 systemctl restart scu-api（现网为 root）
+#   ECS_SSH_PRIVATE_KEY
+#   DB_HOST
+#   DB_PORT
+#   DB_NAME
+#   DB_USER
+#   DB_PASSWORD
+
+name: API 同步到阿里云 ECS
+
+on:
+  push:
+    branches:
+      - dev-api-deploy
+    paths:
+      - 'apps/api/**'
+      - '.github/workflows/api-ecs.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: api-ecs-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      ECS_HOST: ${{ secrets.ECS_HOST }}
+      ECS_USER: ${{ secrets.ECS_USER }}
+      ECS_SSH_PRIVATE_KEY: ${{ secrets.ECS_SSH_PRIVATE_KEY }}
+      DB_HOST: ${{ secrets.DB_HOST }}
+      DB_PORT: ${{ secrets.DB_PORT }}
+      DB_NAME: ${{ secrets.DB_NAME }}
+      DB_USER: ${{ secrets.DB_USER }}
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+    steps:
+      - name: 取出代码
+        uses: actions/checkout@v4
+
+      - name: 同步 API 并写入数据库配置
+        run: |
+          set -euo pipefail
+          for name in ECS_HOST ECS_USER ECS_SSH_PRIVATE_KEY DB_HOST DB_PORT DB_NAME DB_USER DB_PASSWORD; do
+            if [ -z "${!name}" ]; then
+              echo "请在 GitHub Actions Secrets 中配置 ${name}。" >&2
+              exit 1
+            fi
+          done
+          if ! [[ "$DB_PORT" =~ ^[0-9]+$ ]]; then
+            echo "DB_PORT 必须是数字。" >&2
+            exit 1
+          fi
+
+          umask 077
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$ECS_SSH_PRIVATE_KEY" > ~/.ssh/ecs_key
+          chmod 600 ~/.ssh/ecs_key
+          ssh-keyscan -H -T 10 "$ECS_HOST" >> ~/.ssh/known_hosts
+
+          SSH=(ssh -i "$HOME/.ssh/ecs_key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes)
+          target="${ECS_USER}@${ECS_HOST}"
+
+          "${SSH[@]}" "$target" "mkdir -p /opt/scu-broker/apps/api /opt/scu-broker/uploads"
+
+          rsync -az \
+            -e "ssh -i $HOME/.ssh/ecs_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
+            --exclude node_modules \
+            --exclude .env \
+            apps/api/ "${target}:/opt/scu-broker/apps/api/"
+
+          payload="$(mktemp)"
+          trap 'rm -f "$payload"' EXIT
+          PAYLOAD="$payload" python3 - << 'PY'
+          import json, os
+          keys = ["DB_HOST", "DB_PORT", "DB_NAME", "DB_USER", "DB_PASSWORD"]
+          data = {}
+          for key in keys:
+              value = os.environ.get(key, "")
+              if not value:
+                  raise SystemExit(f"GitHub Secret {key} 为空")
+              if "\n" in value or "\r" in value:
+                  raise SystemExit(f"{key} 不能包含换行")
+              data[key] = value
+          path = os.environ["PAYLOAD"]
+          with open(path, "w", encoding="utf-8") as fh:
+              json.dump(data, fh)
+          os.chmod(path, 0o600)
+          PY
+
+          remote_payload="/tmp/scu-api-db-${GITHUB_RUN_ID}.json"
+          "${SSH[@]}" "$target" "umask 077; cat > '${remote_payload}'" < "$payload"
+
+          "${SSH[@]}" "$target" "PAYLOAD='${remote_payload}' bash -s" << 'REMOTE'
+          set -euo pipefail
+          trap 'rm -f "$PAYLOAD"' EXIT
+          if [ -x /usr/local/lib/nodejs/node-v22.12.0/bin/node ]; then
+            NODE=/usr/local/lib/nodejs/node-v22.12.0/bin/node
+          else
+            NODE="$(command -v node)"
+          fi
+          "$NODE" - "$PAYLOAD" << 'JS'
+          const fs = require('fs');
+          const http = require('http');
+          const { execFileSync } = require('child_process');
+
+          const payloadPath = process.argv[2];
+          const updates = JSON.parse(fs.readFileSync(payloadPath, 'utf8'));
+          fs.rmSync(payloadPath, { force: true });
+
+          const envFile = '/opt/scu-broker/apps/api/.env';
+          if (!fs.existsSync(envFile)) {
+            console.error('服务器上还没有 /opt/scu-broker/apps/api/.env。请先放好 PORT、JWT_SECRET、UPLOAD_DIR=/opt/scu-broker/uploads 等非数据库配置。');
+            process.exit(1);
+          }
+
+          const systemdValue = (value) => value.replaceAll('%', '%%').replaceAll('$', '$$');
+          let text = fs.readFileSync(envFile, 'utf8');
+          for (const [key, value] of Object.entries(updates)) {
+            const line = `${key}=${systemdValue(value)}`;
+            const pattern = new RegExp(`^(?:export\\s+)?${key}=.*$`, 'm');
+            if (pattern.test(text)) text = text.replace(pattern, () => line);
+            else text += (text.endsWith('\n') ? '' : '\n') + line + '\n';
+          }
+          if (!text.endsWith('\n')) text += '\n';
+          fs.writeFileSync(envFile, text, { mode: 0o600 });
+
+          const fixedNpm = '/usr/local/lib/nodejs/node-v22.12.0/bin/npm';
+          const npm = fs.existsSync(fixedNpm)
+            ? fixedNpm
+            : execFileSync('bash', ['-lc', 'command -v npm'], { encoding: 'utf8' }).trim();
+          if (!npm) {
+            console.error('服务器上找不到 npm');
+            process.exit(1);
+          }
+          execFileSync(npm, ['ci', '--omit=dev', '--no-fund', '--no-audit'], {
+            cwd: '/opt/scu-broker/apps/api',
+            stdio: 'inherit',
+          });
+          execFileSync('systemctl', ['restart', 'scu-api'], { stdio: 'inherit' });
+
+          let port = '3010';
+          for (const line of text.split('\n')) {
+            const matched = line.match(/^(?:export\s+)?PORT=(.*)$/);
+            if (matched) port = matched[1].trim();
+          }
+          if (!/^\d+$/.test(port)) {
+            console.error('服务器 .env 中的 PORT 不是数字');
+            process.exit(1);
+          }
+
+          function checkHealth() {
+            return new Promise((resolve, reject) => {
+              const req = http.get({ host: '127.0.0.1', port, path: '/api/health', timeout: 2000 }, (res) => {
+                res.resume();
+                if (res.statusCode === 200) resolve();
+                else reject(new Error(`health HTTP ${res.statusCode}`));
+              });
+              req.on('error', reject);
+              req.on('timeout', () => {
+                req.destroy();
+                reject(new Error('health timeout'));
+              });
+            });
+          }
+
+          (async () => {
+            let lastError = null;
+            for (let i = 0; i < 20; i += 1) {
+              try {
+                await checkHealth();
+                console.log(`scu-api 已监听 127.0.0.1:${port}`);
+                return;
+              } catch (error) {
+                lastError = error;
+                await new Promise((resolve) => setTimeout(resolve, 1000));
+              }
+            }
+            console.error(lastError && lastError.message ? lastError.message : '健康检查失败');
+            process.exit(1);
+          })();
+          JS
+          REMOTE
