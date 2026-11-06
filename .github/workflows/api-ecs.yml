@@ -83,6 +83,8 @@ jobs:
             --exclude .env \
             . | "${SSH[@]}" "$target" "tar -C /opt/scu-broker/apps/api -xzf -"
 
+          "${SSH[@]}" "$target" "cat > /etc/systemd/system/scu-api.service && chmod 644 /etc/systemd/system/scu-api.service && systemctl daemon-reload && systemctl enable scu-api" < deploy/scu-api.service
+
           payload="$(mktemp)"
           trap 'rm -f "$payload"' EXIT
           PAYLOAD="$payload" python3 - << 'PY'
