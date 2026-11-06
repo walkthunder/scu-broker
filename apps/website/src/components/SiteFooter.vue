@@ -46,13 +46,20 @@ const columns = [
 
 <template>
   <footer class="border-t border-line bg-ink">
-    <div class="shell grid gap-10 py-14 sm:grid-cols-2 lg:grid-cols-6">
-      <div class="lg:col-span-2">
+    <div class="shell py-14">
+      <div>
         <BrandLogo label="硅元引擎首页" />
-        <p class="mt-4 max-w-xs text-sm leading-6 text-mute">
-          算力市场的价格发现与价格风险管理。价格指数、远期曲线和经纪成交协作放在一起。
-        </p>
+        <div class="mt-4 flex gap-4 text-sm">
+          <RouterLink v-slot="{ href, navigate }" custom :to="{ path: '/', hash: '#indices' }">
+            <a :href="href" class="text-mute hover:text-gold" @click="navigate">价格指数</a>
+          </RouterLink>
+          <RouterLink v-slot="{ href, navigate }" custom :to="{ path: '/', hash: '#auctions' }">
+            <a :href="href" class="text-mute hover:text-gold" @click="navigate">拍卖标的</a>
+          </RouterLink>
+        </div>
       </div>
+      <!--
+      产品、指数目录、公司和资源链接先停用。
       <div v-for="column in columns" :key="column.title">
         <h2 class="text-sm font-medium text-paper">{{ column.title }}</h2>
         <ul class="mt-4 space-y-2.5">
@@ -61,11 +68,11 @@ const columns = [
           </li>
         </ul>
       </div>
+      -->
     </div>
     <div class="border-t border-line">
-      <div class="shell flex flex-col gap-2 py-5 text-xs text-mute sm:flex-row sm:items-center sm:justify-between">
+      <div class="shell py-5 text-xs text-mute">
         <p>© {{ new Date().getFullYear() }} 硅元引擎</p>
-        <p>指数与参考价不构成要约。</p>
       </div>
     </div>
   </footer>

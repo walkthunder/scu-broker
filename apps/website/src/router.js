@@ -17,7 +17,7 @@ import NotFound from './views/NotFound.vue';
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
-    { path: '/', name: 'home', component: Home, meta: { title: '硅元引擎 — 算力市场情报' } },
+    { path: '/', name: 'home', component: Home, meta: { title: '硅元引擎 — 算力价格指数' } },
     { path: '/products', name: 'products', component: Products, meta: { title: '产品 — 硅元引擎' } },
     { path: '/products/:slug', name: 'product', component: ProductDetail, meta: { title: '产品 — 硅元引擎' } },
     { path: '/markets', name: 'markets', component: Markets, meta: { title: '行情 — 硅元引擎' } },
@@ -32,7 +32,8 @@ const router = createRouter({
     { path: '/legal/:page', name: 'legal', component: Legal, meta: { title: '法律信息 — 硅元引擎' } },
     { path: '/:pathMatch(.*)*', name: 'not-found', component: NotFound, meta: { title: '未找到 — 硅元引擎' } },
   ],
-  scrollBehavior() {
+  scrollBehavior(to) {
+    if (to.hash) return { el: to.hash, behavior: 'smooth' };
     return { top: 0 };
   },
 });

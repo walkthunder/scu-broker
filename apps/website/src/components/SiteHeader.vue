@@ -57,6 +57,12 @@ function active(path) {
   return route.path === path || route.path.startsWith(`${path}/`);
 }
 
+function sectionOn(hash) {
+  if (route.path !== '/') return false;
+  if (hash === '#indices') return route.hash === '' || route.hash === '#indices';
+  return route.hash === hash;
+}
+
 function toggle(id) {
   openMenu.value = openMenu.value === id ? '' : id;
 }
@@ -75,6 +81,8 @@ watch(
 
 <template>
   <div class="sticky top-0 z-40">
+    <!--
+    顶栏说明先隐藏。
     <div class="border-b border-line bg-panel text-xs text-mute">
       <div class="shell flex h-9 items-center justify-between gap-4">
         <p class="truncate">指数与参考价不构成要约。正式结算以双人复核后的价格公告为准。</p>
@@ -83,10 +91,37 @@ watch(
         </RouterLink>
       </div>
     </div>
+    -->
     <header class="border-b border-line bg-panel/95 backdrop-blur">
       <div class="shell flex h-16 items-center gap-6">
         <BrandLogo />
 
+        <nav class="hidden items-center gap-1 md:flex" aria-label="主导航">
+          <RouterLink v-slot="{ href, navigate }" custom :to="{ path: '/', hash: '#indices' }">
+            <a
+              :href="href"
+              class="rounded-lg px-3 py-2 text-sm"
+              :class="sectionOn('#indices') ? 'text-paper' : 'text-dim hover:text-paper'"
+              :aria-current="sectionOn('#indices') ? 'page' : undefined"
+              @click="navigate"
+            >
+              价格指数
+            </a>
+          </RouterLink>
+          <RouterLink v-slot="{ href, navigate }" custom :to="{ path: '/', hash: '#auctions' }">
+            <a
+              :href="href"
+              class="rounded-lg px-3 py-2 text-sm"
+              :class="sectionOn('#auctions') ? 'text-paper' : 'text-dim hover:text-paper'"
+              :aria-current="sectionOn('#auctions') ? 'page' : undefined"
+              @click="navigate"
+            >
+              拍卖标的
+            </a>
+          </RouterLink>
+        </nav>
+        <!--
+        产品、公司、资源、行情、定价先停用。
         <nav class="hidden items-center gap-1 lg:flex" aria-label="主导航">
           <div v-for="menu in menus" :key="menu.id" class="relative" @mouseleave="openMenu = ''">
             <button
@@ -132,8 +167,11 @@ watch(
             定价
           </RouterLink>
         </nav>
+        -->
 
         <div class="ml-auto flex items-center gap-2">
+          <!--
+          指数搜索先停用。
           <div class="relative hidden md:block">
             <label class="sr-only" for="site-search">搜索指数</label>
             <input
@@ -160,13 +198,17 @@ watch(
               <p v-if="!hits.length" class="px-3 py-3 text-sm text-mute">没有匹配的指数代码</p>
             </div>
           </div>
+          -->
+          <!--
+          登录和注册先隐藏。
           <a :href="customerLogin" class="hidden h-9 items-center px-3 text-sm text-paper hover:text-gold sm:inline-flex">
             登录
           </a>
           <RouterLink to="/start" class="btn-gold hidden h-9 sm:inline-flex">注册</RouterLink>
+          -->
           <button
             type="button"
-            class="grid h-9 w-9 place-items-center rounded-lg border border-line lg:hidden"
+            class="grid h-9 w-9 place-items-center rounded-lg border border-line md:hidden"
             :aria-expanded="mobileOpen"
             aria-label="打开菜单"
             @click="mobileOpen = !mobileOpen"
@@ -177,6 +219,25 @@ watch(
           </button>
         </div>
       </div>
+      <div v-if="mobileOpen" class="border-t border-line bg-panel md:hidden">
+        <div class="shell space-y-3 py-4">
+          <RouterLink v-slot="{ href, navigate }" custom :to="{ path: '/', hash: '#indices' }">
+            <a :href="href" class="block text-sm text-paper" @click="navigate">价格指数</a>
+          </RouterLink>
+          <RouterLink v-slot="{ href, navigate }" custom :to="{ path: '/', hash: '#auctions' }">
+            <a :href="href" class="block text-sm text-paper" @click="navigate">拍卖标的</a>
+          </RouterLink>
+          <!--
+          登录和注册先隐藏。
+          <div class="flex gap-2 pt-2">
+            <a :href="customerLogin" class="btn-line flex-1">登录</a>
+            <RouterLink to="/start" class="btn-gold flex-1">注册</RouterLink>
+          </div>
+          -->
+        </div>
+      </div>
+      <!--
+      移动端里的搜索、产品、公司和行情入口先停用。
       <div v-if="mobileOpen" class="border-t border-line bg-panel lg:hidden">
         <div class="shell space-y-4 py-4">
           <label class="sr-only" for="mobile-search">搜索指数</label>
@@ -205,6 +266,7 @@ watch(
           </div>
         </div>
       </div>
+      -->
     </header>
   </div>
 </template>

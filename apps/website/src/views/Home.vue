@@ -1,4 +1,28 @@
 <script setup>
+import AuctionBoard from '../components/AuctionBoard.vue';
+import GpuTrendChart from '../components/GpuTrendChart.vue';
+import {
+  asOf,
+  changeRate,
+  formatPct,
+  formatPrice,
+  gpuSeries,
+  latest,
+  periods,
+} from '../data/board';
+
+const cards = gpuSeries.map((item) => {
+  const rate = changeRate(item);
+  return {
+    ...item,
+    price: formatPrice(latest(item)),
+    rate,
+    changeText: formatPct(rate),
+  };
+});
+
+/*
+旧首页逻辑先停用：邮箱注册引导、产品切换、使用对象、平台说明。
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import MarketBoard from '../components/MarketBoard.vue';
@@ -16,10 +40,58 @@ function goStart() {
   const value = email.value.trim();
   router.push({ name: 'start', query: value ? { email: value } : {} });
 }
+*/
 </script>
 
 <template>
   <main>
+    <section id="indices" class="scroll-mt-20 border-b border-line">
+      <div class="shell py-10 lg:py-14">
+        <div class="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl">价格指数</h1>
+            <p class="mt-2 text-sm text-mute">更新日期 {{ asOf }} · 代码 H200 / PTG / ASC</p>
+          </div>
+        </div>
+        <div class="mt-6 grid gap-4 lg:grid-cols-3">
+          <article v-for="item in cards" :key="item.id" class="rounded-2xl border border-line bg-card p-5">
+            <p class="text-sm text-dim">{{ item.title }}</p>
+            <p class="mt-1 text-xs text-mute">{{ item.kind }}</p>
+            <p class="mt-4 text-4xl font-semibold tracking-tight tabular-nums">
+              {{ item.price }}
+              <span class="ml-1 text-sm font-normal text-mute">{{ item.unit }}</span>
+            </p>
+            <p class="mt-3 text-xs text-mute">
+              较上期
+              <span :class="item.rate >= 0 ? 'text-[#0ECB81]' : 'text-[#F6465D]'">{{ item.changeText }}</span>
+              · 本期样本成交 {{ item.samples }} 笔
+            </p>
+          </article>
+        </div>
+
+        <div class="mt-4 rounded-2xl border border-line bg-card p-4 sm:p-5">
+          <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <h2 class="text-sm font-medium text-paper">近 12 期走势</h2>
+            <ul class="flex flex-wrap gap-4 text-xs text-dim">
+              <li v-for="item in gpuSeries" :key="item.id" class="inline-flex items-center gap-1.5">
+                <span class="h-2 w-2 rounded-full" :style="{ background: item.color }" />
+                {{ item.name }}
+              </li>
+            </ul>
+          </div>
+          <GpuTrendChart :series="gpuSeries" :labels="periods" />
+        </div>
+      </div>
+    </section>
+
+    <section id="auctions" class="scroll-mt-20">
+      <div class="shell min-w-0 py-10 lg:py-14">
+        <AuctionBoard />
+      </div>
+    </section>
+
+    <!--
+    以下模块先停用：说明入口、产品、使用对象、平台说明、底部引导。
     <section class="border-b border-line">
       <div class="shell grid min-w-0 items-start gap-10 py-14 lg:grid-cols-[1.15fr_0.85fr] lg:py-20">
         <div>
@@ -154,5 +226,6 @@ function goStart() {
         </div>
       </div>
     </section>
+    -->
   </main>
 </template>
