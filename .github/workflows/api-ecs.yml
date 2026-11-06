@@ -108,10 +108,13 @@ jobs:
           "${SSH[@]}" "$target" "PAYLOAD='${remote_payload}' bash -s" << 'REMOTE'
           set -euo pipefail
           trap 'rm -f "$PAYLOAD"' EXIT
-          if [ -x /usr/local/lib/nodejs/node-v22.12.0/bin/node ]; then
-            NODE=/usr/local/lib/nodejs/node-v22.12.0/bin/node
+          if [ -x /usr/local/lib/nodejs/node-v24.22.1/bin/node ]; then
+            NODE=/usr/local/lib/nodejs/node-v24.22.1/bin/node
+          elif NODE="$(command -v node)"; then
+            :
           else
-            NODE="$(command -v node)"
+            echo "ECS 上没有 Node.js。请安装 Node.js 24.22.1，并启用 scu-api.service。" >&2
+            exit 1
           fi
           "$NODE" - "$PAYLOAD" << 'JS'
           const fs = require('fs');
@@ -139,7 +142,7 @@ jobs:
           if (!text.endsWith('\n')) text += '\n';
           fs.writeFileSync(envFile, text, { mode: 0o600 });
 
-          const fixedNpm = '/usr/local/lib/nodejs/node-v22.12.0/bin/npm';
+          const fixedNpm = '/usr/local/lib/nodejs/node-v24.22.1/bin/npm';
           const npm = fs.existsSync(fixedNpm)
             ? fixedNpm
             : execFileSync('bash', ['-lc', 'command -v npm'], { encoding: 'utf8' }).trim();

@@ -7,7 +7,7 @@ Wants=mariadb.service
 Type=simple
 WorkingDirectory=/opt/scu-broker/apps/api
 EnvironmentFile=/opt/scu-broker/apps/api/.env
-ExecStart=/usr/local/lib/nodejs/node-v22.12.0/bin/node src/index.js
+ExecStart=/usr/local/lib/nodejs/node-v24.22.1/bin/node src/index.js
 Restart=on-failure
 RestartSec=5
 # 低内存同机：限制 API 内存，避免挤垮 Dify
