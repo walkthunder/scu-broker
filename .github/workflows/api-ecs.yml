@@ -68,7 +68,10 @@ jobs:
           chmod 700 ~/.ssh
           printf '%s\n' "$ECS_SSH_PRIVATE_KEY" > ~/.ssh/ecs_key
           chmod 600 ~/.ssh/ecs_key
-          ssh-keyscan -H -T 10 "$ECS_HOST" >> ~/.ssh/known_hosts
+          if ! ssh-keyscan -H -T 10 "$ECS_HOST" >> ~/.ssh/known_hosts; then
+            echo "无法从 GitHub Actions 连上 ECS 的 22 端口（10 秒超时）。ECS_HOST 请填公网 IP，并在安全组放行 TCP 22。" >&2
+            exit 1
+          fi
 
           SSH=(ssh -i "$HOME/.ssh/ecs_key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes)
           target="${ECS_USER}@${ECS_HOST}"
