@@ -78,11 +78,10 @@ jobs:
 
           "${SSH[@]}" "$target" "mkdir -p /opt/scu-broker/apps/api /opt/scu-broker/uploads"
 
-          rsync -az \
-            -e "ssh -i $HOME/.ssh/ecs_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
+          tar -C apps/api -czf - \
             --exclude node_modules \
             --exclude .env \
-            apps/api/ "${target}:/opt/scu-broker/apps/api/"
+            . | "${SSH[@]}" "$target" "tar -C /opt/scu-broker/apps/api -xzf -"
 
           payload="$(mktemp)"
           trap 'rm -f "$payload"' EXIT
