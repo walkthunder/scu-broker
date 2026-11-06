@@ -1,13 +1,13 @@
-# 仅在 dev-api-deploy 上、apps/api 有变更时同步 API 到阿里云 ECS 并重启 scu-api。
-# 服务器路径与 systemd 单元沿用 deploy/。密钥放在仓库 Settings → Secrets and variables → Actions → Secrets，不要写进本文件。
+# 仅在 dev-api-deploy 上、apps/api 有变更时同步 API 到阿里云 ECS，并用 PM2 启动 scu-api。
+# 密钥放在仓库 Settings → Secrets and variables → Actions → Secrets，不要写进本文件。
 #
 # 数据库五项由本次发布写入服务器 /opt/scu-broker/apps/api/.env，只覆盖这五项。
-# PORT、JWT_SECRET、UPLOAD_DIR 等仍留在该文件里，rsync 排除 .env，不会覆盖。
-# 该文件需事先存在，且 scu-api.service 的 EnvironmentFile 指向它。
+# PORT、JWT_SECRET、UPLOAD_DIR 等仍留在该文件里，同步时排除 .env，不会覆盖。
+# 该文件需事先存在。API 进程由 PM2 启动，应用自己读取这份 .env。
 #
 # Secrets:
 #   ECS_HOST
-#   ECS_USER              需能写入上述 .env，并执行 systemctl restart scu-api（现网为 root）
+#   ECS_USER              需能写入上述 .env，并执行 pm2（现网为 root）
 #   ECS_SSH_PRIVATE_KEY
 #   DB_HOST
 #   DB_PORT
@@ -83,8 +83,6 @@ jobs:
             --exclude .env \
             . | "${SSH[@]}" "$target" "tar -C /opt/scu-broker/apps/api -xzf -"
 
-          "${SSH[@]}" "$target" "cat > /etc/systemd/system/scu-api.service && chmod 644 /etc/systemd/system/scu-api.service && systemctl daemon-reload && systemctl enable scu-api" < deploy/scu-api.service
-
           payload="$(mktemp)"
           trap 'rm -f "$payload"' EXIT
           PAYLOAD="$payload" python3 - << 'PY'
@@ -112,12 +110,16 @@ jobs:
           trap 'rm -f "$PAYLOAD"' EXIT
           if [ -x /usr/local/lib/nodejs/node-v24.22.1/bin/node ]; then
             NODE=/usr/local/lib/nodejs/node-v24.22.1/bin/node
+          elif [ -x /usr/local/lib/nodejs/node-v24.22.1-linux-x64/bin/node ]; then
+            NODE=/usr/local/lib/nodejs/node-v24.22.1-linux-x64/bin/node
           elif NODE="$(command -v node)"; then
             :
           else
-            echo "ECS 上没有 Node.js。请安装 Node.js 24.22.1，并启用 scu-api.service。" >&2
+            echo "ECS 上没有 Node.js。请安装 Node.js 24.22.1。" >&2
             exit 1
           fi
+          export NODE
+          systemctl disable --now scu-api >/dev/null 2>&1 || true
           "$NODE" - "$PAYLOAD" << 'JS'
           const fs = require('fs');
           const http = require('http');
@@ -133,30 +135,51 @@ jobs:
             process.exit(1);
           }
 
-          const systemdValue = (value) => value.replaceAll('%', '%%').replaceAll('$', '$$');
           let text = fs.readFileSync(envFile, 'utf8');
           for (const [key, value] of Object.entries(updates)) {
-            const line = `${key}=${systemdValue(value)}`;
+            const line = `${key}=${value}`;
             const pattern = new RegExp(`^(?:export\\s+)?${key}=.*$`, 'm');
             if (pattern.test(text)) text = text.replace(pattern, () => line);
             else text += (text.endsWith('\n') ? '' : '\n') + line + '\n';
           }
+          if (!/^(?:export\s+)?PORT=/m.test(text)) {
+            text += (text.endsWith('\n') ? '' : '\n') + 'PORT=3010\n';
+          }
           if (!text.endsWith('\n')) text += '\n';
           fs.writeFileSync(envFile, text, { mode: 0o600 });
 
-          const fixedNpm = '/usr/local/lib/nodejs/node-v24.22.1/bin/npm';
-          const npm = fs.existsSync(fixedNpm)
-            ? fixedNpm
-            : execFileSync('bash', ['-lc', 'command -v npm'], { encoding: 'utf8' }).trim();
-          if (!npm) {
+          const nodeBin = process.env.NODE;
+          const binDir = nodeBin.slice(0, nodeBin.lastIndexOf('/'));
+          const npm = `${binDir}/npm`;
+          const pm2 = `${binDir}/pm2`;
+          if (!fs.existsSync(npm)) {
             console.error('服务器上找不到 npm');
             process.exit(1);
           }
+          const appDir = '/opt/scu-broker/apps/api';
           execFileSync(npm, ['ci', '--omit=dev', '--no-fund', '--no-audit'], {
-            cwd: '/opt/scu-broker/apps/api',
+            cwd: appDir,
             stdio: 'inherit',
           });
-          execFileSync('systemctl', ['restart', 'scu-api'], { stdio: 'inherit' });
+          if (!fs.existsSync(pm2)) {
+            execFileSync(npm, ['install', '-g', 'pm2'], { stdio: 'inherit' });
+          }
+          let running = false;
+          try {
+            execFileSync(pm2, ['describe', 'scu-api'], { stdio: 'ignore' });
+            running = true;
+          } catch {
+            running = false;
+          }
+          if (running) {
+            execFileSync(pm2, ['restart', 'scu-api', '--update-env'], { cwd: appDir, stdio: 'inherit' });
+          } else {
+            execFileSync(pm2, ['start', 'src/index.js', '--name', 'scu-api', '--interpreter', nodeBin], {
+              cwd: appDir,
+              stdio: 'inherit',
+            });
+          }
+          execFileSync(pm2, ['save'], { stdio: 'inherit' });
 
           let port = '3010';
           for (const line of text.split('\n')) {
@@ -196,6 +219,11 @@ jobs:
               }
             }
             console.error(lastError && lastError.message ? lastError.message : '健康检查失败');
+            try {
+              execFileSync(pm2, ['logs', 'scu-api', '--nostream', '--lines', '40'], { stdio: 'inherit' });
+            } catch (error) {
+              console.error(error && error.message ? error.message : error);
+            }
             process.exit(1);
           })();
           JS
