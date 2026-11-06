@@ -1,21 +1,12 @@
-# 仅在 dev-api-deploy 上、apps/api 有变更时同步 API 到阿里云 ECS，并用 PM2 启动 scu-api。
-# 密钥放在仓库 Settings → Secrets and variables → Actions → Secrets，不要写进本文件。
-#
-# 数据库五项由本次发布写入服务器 /opt/scu-broker/apps/api/.env，只覆盖这五项。
-# PORT、JWT_SECRET、UPLOAD_DIR 等仍留在该文件里，同步时排除 .env，不会覆盖。
-# 该文件需事先存在。API 进程由 PM2 启动，应用自己读取这份 .env。
+# dev-api-deploy 上 apps/api 有变更时：同步代码到 ECS，再用已安装的 PM2 启动。
+# Node.js 和 PM2 在 ECS 上安装一次，脚本里不再安装。
+# 数据库五项放在 GitHub Actions Secrets，发布时写入服务器 .env，不覆盖其余配置。
 #
 # Secrets:
-#   ECS_HOST
-#   ECS_USER              需能写入上述 .env，并执行 pm2（现网为 root）
-#   ECS_SSH_PRIVATE_KEY
-#   DB_HOST
-#   DB_PORT
-#   DB_NAME
-#   DB_USER
-#   DB_PASSWORD
+#   ECS_HOST  ECS_USER  ECS_SSH_PRIVATE_KEY
+#   DB_HOST  DB_PORT  DB_NAME  DB_USER  DB_PASSWORD
 
-name: API 同步到阿里云 ECS
+name: API服务 同步到阿里云 ECS
 
 on:
   push:
@@ -49,7 +40,7 @@ jobs:
       - name: 取出代码
         uses: actions/checkout@v4
 
-      - name: 同步 API 并写入数据库配置
+      - name: 同步代码并用 PM2 启动
         run: |
           set -euo pipefail
           for name in ECS_HOST ECS_USER ECS_SSH_PRIVATE_KEY DB_HOST DB_PORT DB_NAME DB_USER DB_PASSWORD; do
@@ -58,10 +49,6 @@ jobs:
               exit 1
             fi
           done
-          if ! [[ "$DB_PORT" =~ ^[0-9]+$ ]]; then
-            echo "DB_PORT 必须是数字。" >&2
-            exit 1
-          fi
 
           umask 077
           mkdir -p ~/.ssh
@@ -69,162 +56,69 @@ jobs:
           printf '%s\n' "$ECS_SSH_PRIVATE_KEY" > ~/.ssh/ecs_key
           chmod 600 ~/.ssh/ecs_key
           if ! ssh-keyscan -H -T 10 "$ECS_HOST" >> ~/.ssh/known_hosts; then
-            echo "无法从 GitHub Actions 连上 ECS 的 22 端口（10 秒超时）。ECS_HOST 请填公网 IP，并在安全组放行 TCP 22。" >&2
+            echo "无法连上 ECS 的 22 端口。ECS_HOST 请填公网 IP，并放行 TCP 22。" >&2
             exit 1
           fi
 
           SSH=(ssh -i "$HOME/.ssh/ecs_key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes)
           target="${ECS_USER}@${ECS_HOST}"
+          app=/opt/scu-broker/apps/api
 
-          "${SSH[@]}" "$target" "mkdir -p /opt/scu-broker/apps/api /opt/scu-broker/uploads"
-
-          tar -C apps/api -czf - \
-            --exclude node_modules \
-            --exclude .env \
-            . | "${SSH[@]}" "$target" "tar -C /opt/scu-broker/apps/api -xzf -"
+          "${SSH[@]}" "$target" "mkdir -p $app /opt/scu-broker/uploads"
+          tar -C apps/api -czf - --exclude node_modules --exclude .env . \
+            | "${SSH[@]}" "$target" "tar -C $app -xzf -"
 
           payload="$(mktemp)"
           trap 'rm -f "$payload"' EXIT
           PAYLOAD="$payload" python3 - << 'PY'
           import json, os
           keys = ["DB_HOST", "DB_PORT", "DB_NAME", "DB_USER", "DB_PASSWORD"]
-          data = {}
-          for key in keys:
-              value = os.environ.get(key, "")
-              if not value:
-                  raise SystemExit(f"GitHub Secret {key} 为空")
-              if "\n" in value or "\r" in value:
-                  raise SystemExit(f"{key} 不能包含换行")
-              data[key] = value
-          path = os.environ["PAYLOAD"]
-          with open(path, "w", encoding="utf-8") as fh:
+          data = {key: os.environ[key] for key in keys}
+          if any("\n" in value or "\r" in value or value == "" for value in data.values()):
+              raise SystemExit("数据库配置不能为空，也不能包含换行")
+          with open(os.environ["PAYLOAD"], "w", encoding="utf-8") as fh:
               json.dump(data, fh)
-          os.chmod(path, 0o600)
           PY
+          "${SSH[@]}" "$target" "umask 077; cat > /tmp/scu-api-db.json" < "$payload"
 
-          remote_payload="/tmp/scu-api-db-${GITHUB_RUN_ID}.json"
-          "${SSH[@]}" "$target" "umask 077; cat > '${remote_payload}'" < "$payload"
-
-          "${SSH[@]}" "$target" "PAYLOAD='${remote_payload}' bash -s" << 'REMOTE'
+          "${SSH[@]}" "$target" "bash -s" << 'REMOTE'
           set -euo pipefail
-          trap 'rm -f "$PAYLOAD"' EXIT
-          if [ -x /usr/local/lib/nodejs/node-v24.22.1/bin/node ]; then
-            NODE=/usr/local/lib/nodejs/node-v24.22.1/bin/node
-          elif [ -x /usr/local/lib/nodejs/node-v24.22.1-linux-x64/bin/node ]; then
-            NODE=/usr/local/lib/nodejs/node-v24.22.1-linux-x64/bin/node
-          elif NODE="$(command -v node)"; then
-            :
-          else
-            echo "ECS 上没有 Node.js。请安装 Node.js 24.22.1。" >&2
+          app=/opt/scu-broker/apps/api
+          if ! command -v node >/dev/null || ! command -v pm2 >/dev/null; then
+            echo "ECS 上需要先装好 node 和 pm2，并且非登录 shell 能直接执行这两个命令。" >&2
             exit 1
           fi
-          export NODE
-          systemctl disable --now scu-api >/dev/null 2>&1 || true
-          "$NODE" - "$PAYLOAD" << 'JS'
+
+          if [ ! -f "$app/.env" ]; then
+            echo "请先在 $app/.env 写好 PORT、JWT_SECRET、UPLOAD_DIR。" >&2
+            exit 1
+          fi
+          node << 'JS'
           const fs = require('fs');
-          const http = require('http');
-          const { execFileSync } = require('child_process');
-
-          const payloadPath = process.argv[2];
-          const updates = JSON.parse(fs.readFileSync(payloadPath, 'utf8'));
-          fs.rmSync(payloadPath, { force: true });
-
-          const envFile = '/opt/scu-broker/apps/api/.env';
-          if (!fs.existsSync(envFile)) {
-            console.error('服务器上还没有 /opt/scu-broker/apps/api/.env。请先放好 PORT、JWT_SECRET、UPLOAD_DIR=/opt/scu-broker/uploads 等非数据库配置。');
-            process.exit(1);
-          }
-
-          let text = fs.readFileSync(envFile, 'utf8');
+          const file = '/opt/scu-broker/apps/api/.env';
+          const updates = JSON.parse(fs.readFileSync('/tmp/scu-api-db.json', 'utf8'));
+          fs.rmSync('/tmp/scu-api-db.json', { force: true });
+          let text = fs.readFileSync(file, 'utf8');
           for (const [key, value] of Object.entries(updates)) {
             const line = `${key}=${value}`;
-            const pattern = new RegExp(`^(?:export\\s+)?${key}=.*$`, 'm');
-            if (pattern.test(text)) text = text.replace(pattern, () => line);
-            else text += (text.endsWith('\n') ? '' : '\n') + line + '\n';
+            const pattern = new RegExp(`^${key}=.*$`, 'm');
+            text = pattern.test(text) ? text.replace(pattern, () => line) : `${text.replace(/\n?$/, '\n')}${line}\n`;
           }
-          if (!/^(?:export\s+)?PORT=/m.test(text)) {
-            text += (text.endsWith('\n') ? '' : '\n') + 'PORT=3010\n';
-          }
-          if (!text.endsWith('\n')) text += '\n';
-          fs.writeFileSync(envFile, text, { mode: 0o600 });
-
-          const nodeBin = process.env.NODE;
-          const binDir = nodeBin.slice(0, nodeBin.lastIndexOf('/'));
-          const npm = `${binDir}/npm`;
-          const pm2 = `${binDir}/pm2`;
-          if (!fs.existsSync(npm)) {
-            console.error('服务器上找不到 npm');
-            process.exit(1);
-          }
-          const appDir = '/opt/scu-broker/apps/api';
-          execFileSync(npm, ['ci', '--omit=dev', '--no-fund', '--no-audit'], {
-            cwd: appDir,
-            stdio: 'inherit',
-          });
-          if (!fs.existsSync(pm2)) {
-            execFileSync(npm, ['install', '-g', 'pm2'], { stdio: 'inherit' });
-          }
-          let running = false;
-          try {
-            execFileSync(pm2, ['describe', 'scu-api'], { stdio: 'ignore' });
-            running = true;
-          } catch {
-            running = false;
-          }
-          if (running) {
-            execFileSync(pm2, ['restart', 'scu-api', '--update-env'], { cwd: appDir, stdio: 'inherit' });
-          } else {
-            execFileSync(pm2, ['start', 'src/index.js', '--name', 'scu-api', '--interpreter', nodeBin], {
-              cwd: appDir,
-              stdio: 'inherit',
-            });
-          }
-          execFileSync(pm2, ['save'], { stdio: 'inherit' });
-
-          let port = '3010';
-          for (const line of text.split('\n')) {
-            const matched = line.match(/^(?:export\s+)?PORT=(.*)$/);
-            if (matched) port = matched[1].trim();
-          }
-          if (!/^\d+$/.test(port)) {
-            console.error('服务器 .env 中的 PORT 不是数字');
-            process.exit(1);
-          }
-
-          function checkHealth() {
-            return new Promise((resolve, reject) => {
-              const req = http.get({ host: '127.0.0.1', port, path: '/api/health', timeout: 2000 }, (res) => {
-                res.resume();
-                if (res.statusCode === 200) resolve();
-                else reject(new Error(`health HTTP ${res.statusCode}`));
-              });
-              req.on('error', reject);
-              req.on('timeout', () => {
-                req.destroy();
-                reject(new Error('health timeout'));
-              });
-            });
-          }
-
-          (async () => {
-            let lastError = null;
-            for (let i = 0; i < 20; i += 1) {
-              try {
-                await checkHealth();
-                console.log('-----', `scu-api 已监听 127.0.0.1:${port}`);
-                return;
-              } catch (error) {
-                lastError = error;
-                await new Promise((resolve) => setTimeout(resolve, 1000));
-              }
-            }
-            console.error(lastError && lastError.message ? lastError.message : '健康检查失败');
-            try {
-              execFileSync(pm2, ['logs', 'scu-api', '--nostream', '--lines', '40'], { stdio: 'inherit' });
-            } catch (error) {
-              console.error(error && error.message ? error.message : error);
-            }
-            process.exit(1);
-          })();
+          if (!/^PORT=/m.test(text)) text += 'PORT=3010\n';
+          fs.writeFileSync(file, text.endsWith('\n') ? text : `${text}\n`, { mode: 0o600 });
           JS
+
+          cd "$app"
+          npm ci --omit=dev --no-fund --no-audit
+          systemctl disable --now scu-api >/dev/null 2>&1 || true
+          pm2 startOrRestart ecosystem.config.cjs --update-env
+          pm2 save
+
+          port=$(sed -n 's/^PORT=//p' "$app/.env" | tail -1)
+          for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+            curl -fsS "http://127.0.0.1:${port}/api/health" && exit 0
+            sleep 1
+          done
+          pm2 logs scu-api --nostream --lines 40 || true
+          exit 1
           REMOTE
