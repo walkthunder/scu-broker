@@ -181,7 +181,7 @@ jobs:
             for (let i = 0; i < 20; i += 1) {
               try {
                 await checkHealth();
-                console.log(`scu-api 已监听 127.0.0.1:${port}`);
+                console.log('-----', `scu-api 已监听 127.0.0.1:${port}`);
                 return;
               } catch (error) {
                 lastError = error;
