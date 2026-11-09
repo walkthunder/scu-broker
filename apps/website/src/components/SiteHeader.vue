@@ -86,7 +86,6 @@ watch(
 
 <template>
   <div class="sticky top-0 z-40">
-    <div class="h-0.5 bg-flare" />
     <!--
     顶栏说明先隐藏。
     <div class="border-b border-line bg-panel text-xs text-mute">
