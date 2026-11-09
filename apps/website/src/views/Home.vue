@@ -49,12 +49,15 @@ function goStart() {
       <div class="shell py-10 lg:py-14">
         <div class="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl">价格指数</h1>
+            <h1 class="flex items-center gap-3 text-3xl font-semibold tracking-tight sm:text-4xl">
+              <span class="h-7 w-1 shrink-0 rounded-sm bg-flare" aria-hidden="true" />
+              价格指数
+            </h1>
             <p class="mt-2 text-sm text-mute">更新日期 {{ asOf }} · 代码 H200 / PTG / ASC</p>
           </div>
         </div>
         <div class="mt-6 grid gap-4 lg:grid-cols-3">
-          <article v-for="item in cards" :key="item.id" class="rounded-2xl border border-line bg-card p-5">
+          <article v-for="item in cards" :key="item.id" class="rounded-xl border border-line bg-card p-5">
             <p class="text-sm text-dim">{{ item.title }}</p>
             <p class="mt-1 text-xs text-mute">{{ item.kind }}</p>
             <p class="mt-4 text-4xl font-semibold tracking-tight tabular-nums">
@@ -63,13 +66,13 @@ function goStart() {
             </p>
             <p class="mt-3 text-xs text-mute">
               较上期
-              <span :class="item.rate >= 0 ? 'text-[#0ECB81]' : 'text-[#F6465D]'">{{ item.changeText }}</span>
+              <span :class="item.rate >= 0 ? 'text-rise' : 'text-fall'">{{ item.changeText }}</span>
               · 本期样本成交 {{ item.samples }} 笔
             </p>
           </article>
         </div>
 
-        <div class="mt-4 rounded-2xl border border-line bg-card p-4 sm:p-5">
+        <div class="mt-4 rounded-xl border border-line bg-card p-4 sm:p-5">
           <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
             <h2 class="text-sm font-medium text-paper">近 12 期走势</h2>
             <ul class="flex flex-wrap gap-4 text-xs text-dim">

@@ -86,6 +86,7 @@ watch(
 
 <template>
   <div class="sticky top-0 z-40">
+    <div class="h-0.5 bg-flare" />
     <!--
     顶栏说明先隐藏。
     <div class="border-b border-line bg-panel text-xs text-mute">
@@ -98,15 +99,17 @@ watch(
     </div>
     -->
     <header class="border-b border-line bg-panel/95 backdrop-blur">
-      <div class="shell flex h-16 items-center gap-6">
-        <BrandLogo />
+      <div class="shell flex h-16 items-stretch gap-6">
+        <div class="flex items-center">
+          <BrandLogo />
+        </div>
 
-        <nav class="hidden items-center gap-1 md:flex" aria-label="主导航">
+        <nav class="hidden items-stretch gap-1 md:flex" aria-label="主导航">
           <RouterLink v-slot="{ href, navigate }" custom :to="{ path: '/', hash: '#indices' }">
             <a
               :href="href"
-              class="rounded-lg px-3 py-2 text-sm"
-              :class="sectionOn('#indices') ? 'text-paper' : 'text-dim hover:text-paper'"
+              class="-mb-px inline-flex items-center border-b-2 px-3 text-sm"
+              :class="sectionOn('#indices') ? 'border-flare text-paper' : 'border-transparent text-dim hover:text-paper'"
               :aria-current="sectionOn('#indices') ? 'page' : undefined"
               @click="navigate"
             >
@@ -116,8 +119,8 @@ watch(
           <RouterLink v-slot="{ href, navigate }" custom :to="{ path: '/', hash: '#auctions' }">
             <a
               :href="href"
-              class="rounded-lg px-3 py-2 text-sm"
-              :class="sectionOn('#auctions') ? 'text-paper' : 'text-dim hover:text-paper'"
+              class="-mb-px inline-flex items-center border-b-2 px-3 text-sm"
+              :class="sectionOn('#auctions') ? 'border-flare text-paper' : 'border-transparent text-dim hover:text-paper'"
               :aria-current="sectionOn('#auctions') ? 'page' : undefined"
               @click="navigate"
             >
@@ -174,7 +177,7 @@ watch(
         </nav>
         -->
 
-        <div class="ml-auto flex items-center gap-2">
+        <div class="ml-auto flex items-center gap-2 self-center">
           <!--
           指数搜索先停用。
           <div class="relative hidden md:block">

@@ -15,6 +15,7 @@ const root = ref<HTMLElement | null>(null);
 const plot = ref<HTMLElement | null>(null);
 const plotWidth = ref(360);
 const progress = ref(0);
+const hoverIndex = ref<number | null>(null);
 let frame = 0;
 let observer: IntersectionObserver | undefined;
 let resizeObserver: ResizeObserver | undefined;
@@ -126,6 +127,70 @@ const markers = computed(() => {
   );
 });
 
+const hover = computed(() => {
+  const index = hoverIndex.value;
+  const count = props.labels.length;
+  if (index == null || index < 0 || index >= count) return null;
+  const rows = props.series.flatMap((item) => {
+    const value = item.values[index];
+    if (value == null) return [];
+    return [{ id: item.id, name: item.name, color: item.color, value: value.toFixed(2), y: yAt(value) }];
+  });
+  if (!rows.length) return null;
+  return { index, label: props.labels[index], x: xAt(index, count), rows };
+});
+
+const tooltipStyle = computed(() => {
+  const tip = hover.value;
+  if (!tip) return {};
+  const width = plotWidth.value;
+  const height = width * (plotH / plotW);
+  const xPx = (tip.x / plotW) * width;
+  const yPx = (Math.min(...tip.rows.map((row) => row.y)) / plotH) * height;
+  const boxWidth = 148;
+  const boxHeight = 96;
+  const flip = xPx + 12 + boxWidth > width - 4;
+  let top = yPx - 6;
+  if (top + boxHeight > height - 4) top = height - boxHeight - 4;
+  if (top < 4) top = 4;
+  return {
+    top: `${top}px`,
+    left: flip ? `${xPx - 10}px` : `${xPx + 12}px`,
+    transform: flip ? 'translateX(-100%)' : undefined,
+  };
+});
+
+function pointIndex(event: PointerEvent) {
+  const plotEl = event.currentTarget;
+  if (!(plotEl instanceof HTMLElement)) return null;
+  const count = props.labels.length;
+  if (count === 0) return null;
+  const rect = plotEl.getBoundingClientRect();
+  if (rect.width === 0) return null;
+  const x = ((event.clientX - rect.left) / rect.width) * plotW;
+  const reached = progress.value * (count - 1);
+  let nearest = 0;
+  let best = Infinity;
+  for (let index = 0; index < count; index += 1) {
+    if (index > reached + 0.001) break;
+    const distance = Math.abs(xAt(index, count) - x);
+    if (distance < best) {
+      best = distance;
+      nearest = index;
+    }
+  }
+  const gap = count <= 1 ? plotW : (plotW - pad.l - pad.r) / (count - 1);
+  return best <= gap * 0.55 ? nearest : null;
+}
+
+function onPointer(event: PointerEvent) {
+  hoverIndex.value = pointIndex(event);
+}
+
+function onPointerLeave() {
+  hoverIndex.value = null;
+}
+
 function markerEdge(index: number, count: number): 'start' | 'end' | 'mid' {
   if (index === 0) return 'start';
   if (index === count - 1) return 'end';
@@ -211,9 +276,15 @@ function tickShift(_index: number) {
           </span>
         </div>
       </div>
-      <div ref="plot" class="relative min-w-0 flex-1">
+      <div
+        ref="plot"
+        class="relative min-w-0 flex-1"
+        @pointerdown="onPointer"
+        @pointermove="onPointer"
+        @pointerleave="onPointerLeave"
+      >
         <svg
-          class="block h-auto w-full"
+          class="pointer-events-none block h-auto w-full"
           :viewBox="`0 0 ${plotW} ${plotH}`"
           role="img"
           :aria-label="summary"
@@ -225,7 +296,8 @@ function tickShift(_index: number) {
             :x2="plotW - pad.r"
             :y1="tick.y"
             :y2="tick.y"
-            stroke="#2B3139"
+            class="text-line"
+            stroke="currentColor"
             stroke-width="1"
             vector-effect="non-scaling-stroke"
           />
@@ -267,7 +339,44 @@ function tickShift(_index: number) {
             stroke-opacity="0.35"
             vector-effect="non-scaling-stroke"
           />
+          <g v-if="hover">
+            <line
+              :x1="hover.x"
+              :x2="hover.x"
+              y1="0"
+              :y2="plotH"
+              stroke="#D9D2C8"
+              stroke-width="1"
+              vector-effect="non-scaling-stroke"
+            />
+            <circle
+              v-for="row in hover.rows"
+              :key="`${row.id}-hover`"
+              :cx="hover.x"
+              :cy="row.y"
+              r="4.5"
+              fill="#fff"
+              :stroke="row.color"
+              stroke-width="2"
+              vector-effect="non-scaling-stroke"
+            />
+          </g>
         </svg>
+        <div
+          v-if="hover"
+          role="tooltip"
+          class="pointer-events-none absolute z-10 rounded-md border border-line bg-card px-3 py-2 shadow-[0_8px_24px_rgba(28,25,23,0.12)]"
+          :style="tooltipStyle"
+        >
+          <p class="text-xs font-medium text-paper">{{ hover.label }} 期</p>
+          <ul class="mt-1.5 grid grid-cols-[auto_auto_auto] items-center gap-x-2 gap-y-1 text-xs text-paper">
+            <li v-for="row in hover.rows" :key="row.id" class="contents">
+              <span class="h-1.5 w-1.5 rounded-full" :style="{ background: row.color }" />
+              <span>{{ row.name }}</span>
+              <span class="text-right tabular-nums font-medium">{{ row.value }}</span>
+            </li>
+          </ul>
+        </div>
         <span
           v-for="marker in markers"
           :key="marker.key"

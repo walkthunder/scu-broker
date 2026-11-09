@@ -78,14 +78,14 @@ async function copyText() {
           <span class="mb-2 block text-mute">想了解</span>
           <textarea v-model="form.note" rows="4" class="field h-auto py-3" />
         </label>
-        <p v-if="error" class="text-sm text-[#F6465D]">{{ error }}</p>
+        <p v-if="error" class="text-sm text-rise">{{ error }}</p>
         <button type="submit" class="btn-gold">生成可复制说明</button>
       </form>
       <div v-else class="max-w-xl">
         <h2 class="text-xl font-semibold">说明已留在此页</h2>
         <p class="mt-2 text-sm leading-6 text-mute">没有上传。复制后通过你自己的渠道发出。</p>
         <pre class="mt-4 whitespace-pre-wrap rounded-xl bg-card p-4 text-sm leading-6">{{ summary }}</pre>
-        <p v-if="error" class="mt-3 text-sm text-[#F6465D]">{{ error }}</p>
+        <p v-if="error" class="mt-3 text-sm text-rise">{{ error }}</p>
         <div class="mt-4 flex gap-2">
           <button type="button" class="btn-gold" @click="copyText">复制</button>
           <button type="button" class="btn-line" @click="sent = false">返回修改</button>

@@ -14,12 +14,12 @@
   }
 
   ::selection {
-    background: #fcd535;
-    color: #0b0e11;
+    background: #c2410c;
+    color: #fff;
   }
 
   :focus-visible {
-    outline: 2px solid #fcd535;
+    outline: 2px solid #c2410c;
     outline-offset: 2px;
   }
 }
@@ -30,14 +30,14 @@
   }
 
   .btn-gold {
-    @apply inline-flex h-10 items-center justify-center rounded-lg bg-gold px-4 text-sm font-semibold text-ink transition hover:brightness-95;
+    @apply inline-flex h-10 items-center justify-center rounded-lg bg-gold px-4 text-sm font-semibold text-white transition hover:brightness-110;
   }
 
   .btn-line {
-    @apply inline-flex h-10 items-center justify-center rounded-lg border border-line px-4 text-sm font-medium text-paper transition hover:border-dim;
+    @apply inline-flex h-10 items-center justify-center rounded-lg border border-line bg-card px-4 text-sm font-medium text-paper transition hover:border-gold;
   }
 
   .field {
-    @apply h-12 w-full rounded-lg bg-line px-4 text-sm text-paper outline-none ring-1 ring-transparent placeholder:text-mute focus:ring-gold;
+    @apply h-12 w-full rounded-lg border border-line bg-card px-4 text-sm text-paper outline-none ring-1 ring-transparent placeholder:text-mute focus:ring-gold;
   }
 }

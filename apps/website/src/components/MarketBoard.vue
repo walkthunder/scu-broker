@@ -50,7 +50,7 @@ const rows = computed(() => {
         :key="item.id"
         type="button"
         class="rounded-md px-3 py-1.5 text-sm"
-        :class="!query && tab === item.id ? 'bg-white/10 text-paper' : 'text-mute hover:text-paper'"
+        :class="!query && tab === item.id ? 'bg-gold/10 text-paper' : 'text-mute hover:text-paper'"
         @click="tab = item.id; query = ''"
       >
         {{ item.label }}
@@ -59,7 +59,7 @@ const rows = computed(() => {
     </div>
     <div v-if="searchable" class="border-b border-line px-4 py-3">
       <label class="sr-only" for="market-filter">筛选指数</label>
-      <input id="market-filter" v-model="query" type="search" placeholder="代码、标的或区域" class="field h-10 bg-ink" />
+      <input id="market-filter" v-model="query" type="search" placeholder="代码、标的或区域" class="field h-10" />
     </div>
     <div class="overflow-x-auto">
       <table class="w-full min-w-[640px] text-left text-sm">
@@ -73,7 +73,7 @@ const rows = computed(() => {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="item in rows" :key="item.code" class="border-b border-line/80 last:border-0 hover:bg-white/[0.03]">
+          <tr v-for="item in rows" :key="item.code" class="border-b border-line/80 last:border-0 hover:bg-black/[0.03]">
             <td class="px-4 py-3.5">
               <RouterLink :to="`/markets/${item.code}`" class="font-medium text-paper hover:text-gold">
                 {{ item.code }}

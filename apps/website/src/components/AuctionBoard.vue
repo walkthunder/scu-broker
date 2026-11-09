@@ -9,7 +9,7 @@ const note = ref('');
 
 const statusView: Record<AuctionStatus, { label: string; dot: string; text: string }> = {
   soon: { label: '即将开始', dot: 'bg-gold', text: 'text-gold' },
-  live: { label: '竞价中', dot: 'bg-[#0ECB81]', text: 'text-[#0ECB81]' },
+  live: { label: '竞价中', dot: 'bg-live', text: 'text-live' },
   done: { label: '已成交', dot: 'bg-mute', text: 'text-mute' },
 };
 
@@ -39,7 +39,10 @@ function openRow(row: Auction) {
 
 <template>
   <div class="min-w-0">
-    <h2 class="text-3xl font-semibold tracking-tight">正在交易的标的</h2>
+    <h2 class="flex items-center gap-3 text-3xl font-semibold tracking-tight">
+      <span class="h-6 w-1 shrink-0 rounded-sm bg-flare" aria-hidden="true" />
+      正在交易的标的
+    </h2>
 
     <div class="mt-6 flex gap-1 overflow-x-auto border-b border-line" role="tablist" aria-label="挂牌筛选">
       <button
