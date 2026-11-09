@@ -1,10 +1,94 @@
-const regions = [
+export type MarketGroup = 'gpu' | 'token';
+
+export interface Market {
+  code: string;
+  sku: string;
+  spec: string;
+  unit: string;
+  group: MarketGroup;
+  blurb: string;
+  region: string;
+  hot: boolean;
+  name: string;
+}
+
+export interface Product {
+  slug: string;
+  name: string;
+  kicker: string;
+  summary: string;
+  points: string[];
+}
+
+export interface AudiencePoint {
+  title: string;
+  text: string;
+}
+
+export interface Audience {
+  id: string;
+  index: string;
+  title: string;
+  lead: string;
+  points: AudiencePoint[];
+}
+
+export type PlanCta = 'customer' | 'partner' | 'contact';
+
+export interface Plan {
+  name: string;
+  audience: string;
+  items: string[];
+  cta?: PlanCta;
+}
+
+export interface Article {
+  slug: string;
+  title: string;
+  summary: string;
+  paragraphs: string[];
+}
+
+export interface Principle {
+  title: string;
+  text: string;
+}
+
+export interface LegalPage {
+  title: string;
+  paragraphs: string[];
+}
+
+export type LegalSlug = 'terms' | 'privacy';
+
+interface Region {
+  tag: string;
+  name: string;
+}
+
+interface Underlying {
+  sku: string;
+  short: string;
+  spec: string;
+  unit: string;
+  group: MarketGroup;
+  blurb: string;
+}
+
+type RouteParam = string | string[] | undefined;
+
+function firstParam(value: RouteParam): string | undefined {
+  if (Array.isArray(value)) return value[0];
+  return value;
+}
+
+const regions: Region[] = [
   { tag: 'SH', name: '上海' },
   { tag: 'NM', name: '内蒙' },
   { tag: 'GZ', name: '贵州' },
 ];
 
-const underlyings = [
+const underlyings: Underlying[] = [
   {
     sku: 'H100',
     short: 'H100',
@@ -41,7 +125,7 @@ const underlyings = [
 
 const hotCodes = new Set(['H100-SH', 'H100-NM', 'H100-GZ', 'H200-SH', 'PPU-SH', 'TK-SH']);
 
-export const markets = [
+export const markets: Market[] = [
   ...underlyings.flatMap((item) =>
     regions.map((region) => {
       const code = `${item.short}-${region.tag}`;
@@ -71,11 +155,13 @@ export const markets = [
   },
 ];
 
-export function findMarket(code) {
-  return markets.find((item) => item.code.toLowerCase() === String(code || '').toLowerCase());
+export function findMarket(code: RouteParam): Market | undefined {
+  const key = firstParam(code);
+  if (!key) return undefined;
+  return markets.find((item) => item.code.toLowerCase() === key.toLowerCase());
 }
 
-export const products = [
+export const products: Product[] = [
   {
     slug: 'index',
     name: '价格指数',
@@ -144,11 +230,13 @@ export const products = [
   },
 ];
 
-export function findProduct(slug) {
-  return products.find((item) => item.slug === slug);
+export function findProduct(slug: RouteParam): Product | undefined {
+  const key = firstParam(slug);
+  if (!key) return undefined;
+  return products.find((item) => item.slug === key);
 }
 
-export const audiences = [
+export const audiences: Audience[] = [
   {
     id: 'finance',
     index: '01',
@@ -211,7 +299,7 @@ export const audiences = [
   },
 ];
 
-export const plans = [
+export const plans: Plan[] = [
   {
     name: '访客',
     audience: '先了解市场怎么被描述',
@@ -237,7 +325,7 @@ export const plans = [
   },
 ];
 
-export const articles = [
+export const articles: Article[] = [
   {
     slug: 'settlement-price',
     title: '结算价 S 从哪来',
@@ -284,14 +372,16 @@ export const articles = [
   },
 ];
 
-export function findArticle(slug) {
-  return articles.find((item) => item.slug === slug);
+export function findArticle(slug: RouteParam): Article | undefined {
+  const key = firstParam(slug);
+  if (!key) return undefined;
+  return articles.find((item) => item.slug === key);
 }
 
 /** 成年人默读说明文字约 400 字/分钟。计入标题、摘要和正文里的非空白字符。 */
 const CHARS_PER_MINUTE = 400;
 
-export function readingLabel(article) {
+export function readingLabel(article: Article): string {
   const text = [article.title, article.summary, ...article.paragraphs].join('');
   const count = text.replace(/\s/g, '').length;
   const minutes = count / CHARS_PER_MINUTE;
@@ -299,14 +389,14 @@ export function readingLabel(article) {
   return `${Math.ceil(minutes)} 分钟`;
 }
 
-export const principles = [
+export const principles: Principle[] = [
   { title: '先对冲，后交割', text: '先有可信结算价，再扩大合约。到期需要机器时才走实物。' },
   { title: '公告双人发布', text: '提交和复核必须是不同账号。写入账单后的结算价不可回改。' },
   { title: '不虚构成交', text: '曲线用真实样本校准。系统不编造人气，也不编造成交。' },
   { title: '表述保持克制', text: '这是价格发现与价格风险管理，不是自动连续竞价交易所。' },
 ];
 
-export const legal = {
+export const legal: Record<LegalSlug, LegalPage> = {
   terms: {
     title: '使用条款',
     paragraphs: [
@@ -326,3 +416,9 @@ export const legal = {
     ],
   },
 };
+
+export function findLegal(page: RouteParam): LegalPage | undefined {
+  const key = firstParam(page);
+  if (key === 'terms' || key === 'privacy') return legal[key];
+  return undefined;
+}

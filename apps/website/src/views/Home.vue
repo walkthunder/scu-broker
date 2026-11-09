@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import AuctionBoard from '../components/AuctionBoard.vue';
 import GpuTrendChart from '../components/GpuTrendChart.vue';
 import {

@@ -1,10 +1,10 @@
-<script setup>
+<script setup lang="ts">
 import { computed, watchEffect } from 'vue';
 import { useRoute } from 'vue-router';
-import { legal } from '../data/site';
+import { findLegal } from '../data/site';
 
 const route = useRoute();
-const page = computed(() => legal[route.params.page]);
+const page = computed(() => findLegal(route.params.page));
 
 watchEffect(() => {
   if (page.value) document.title = `${page.value.title} — 硅元引擎`;

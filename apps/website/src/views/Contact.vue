@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { computed, reactive, ref } from 'vue';
 import PageHeader from '../components/PageHeader.vue';
 

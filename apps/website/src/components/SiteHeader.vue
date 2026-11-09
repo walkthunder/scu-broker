@@ -1,14 +1,18 @@
-<script setup>
-import { computed, ref, watch } from 'vue';
+<script setup lang="ts">
+import { ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { markets } from '../data/site';
-import { customerLogin } from '../links';
 import BrandLogo from './BrandLogo.vue';
 
 const route = useRoute();
 const openMenu = ref('');
 const mobileOpen = ref(false);
 const query = ref('');
+
+/*
+产品、公司、资源菜单和指数搜索先停用，模板里对应区块也停着。
+import { computed } from 'vue';
+import { markets } from '../data/site';
+import { customerLogin } from '../links';
 
 const menus = [
   {
@@ -53,18 +57,19 @@ const hits = computed(() => {
     .slice(0, 6);
 });
 
-function active(path) {
+function active(path: string) {
   return route.path === path || route.path.startsWith(`${path}/`);
 }
 
-function sectionOn(hash) {
+function toggle(id: string) {
+  openMenu.value = openMenu.value === id ? '' : id;
+}
+*/
+
+function sectionOn(hash: string) {
   if (route.path !== '/') return false;
   if (hash === '#indices') return route.hash === '' || route.hash === '#indices';
   return route.hash === hash;
-}
-
-function toggle(id) {
-  openMenu.value = openMenu.value === id ? '' : id;
 }
 
 function closeAll() {

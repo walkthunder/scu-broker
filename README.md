@@ -17,7 +17,7 @@ apps/api           Express + Sequelize + MySQL / MariaDB
 apps/web-customer  Vue3 + Tailwind（客户行情大厅）
 apps/web-admin     Vue3 + Element Plus（Broker/Admin）
 apps/web-partner   Vue3 + Element Plus（供给伙伴门户）
-apps/website       Vue3 + Tailwind（营销官网）
+apps/website       Vue3 + TypeScript + Tailwind（营销官网）
 deploy/            生产 Nginx / systemd / 低内存 MariaDB 片段
 docker-compose.yml 本地 MySQL + API + Nginx
 docs/              产品设计与需求、开发规范

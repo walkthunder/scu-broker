@@ -1,9 +1,9 @@
-<script setup>
-defineProps({
-  kicker: { type: String, default: '' },
-  title: { type: String, required: true },
-  lead: { type: String, default: '' },
-});
+<script setup lang="ts">
+defineProps<{
+  kicker?: string;
+  title: string;
+  lead?: string;
+}>();
 </script>
 
 <template>

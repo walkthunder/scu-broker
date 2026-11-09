@@ -2,7 +2,37 @@
 export const asOf = '2026-11-01';
 export const demoClock = '2026-11-05';
 
-export const periods = [
+export interface GpuSeries {
+  id: string;
+  name: string;
+  title: string;
+  kind: string;
+  unit: string;
+  color: string;
+  samples: number;
+  values: number[];
+}
+
+export type AuctionStatus = 'soon' | 'live' | 'done';
+
+export interface Auction {
+  id: string;
+  org: string;
+  channel: string;
+  title: string;
+  detail: string;
+  qty: string;
+  window: string;
+  windowNote: string;
+  method: string;
+  price: string;
+  priceNote: string;
+  status: AuctionStatus;
+  within3: boolean;
+  action: string;
+}
+
+export const periods: string[] = [
   '05-16',
   '06-01',
   '06-16',
@@ -17,7 +47,7 @@ export const periods = [
   '11-01',
 ];
 
-export const gpuSeries = [
+export const gpuSeries: GpuSeries[] = [
   {
     id: 'h200',
     name: 'H200',
@@ -50,30 +80,30 @@ export const gpuSeries = [
   },
 ];
 
-export function latest(series) {
+export function latest(series: GpuSeries): number {
   return series.values[series.values.length - 1];
 }
 
-export function changeRate(series) {
+export function changeRate(series: GpuSeries): number {
   const values = series.values;
   const prev = values[values.length - 2];
   return (values[values.length - 1] - prev) / prev;
 }
 
-export function formatPrice(value) {
+export function formatPrice(value: number): string {
   return Number(value).toFixed(2);
 }
 
-export function formatPct(rate) {
+export function formatPct(rate: number): string {
   const text = (rate * 100).toFixed(1);
   return `${rate > 0 ? '+' : ''}${text}%`;
 }
 
-export function formatRatio(a, b) {
+export function formatRatio(a: number, b: number): string {
   return (a / b).toFixed(2);
 }
 
-export const auctions = [
+export const auctions: Auction[] = [
   {
     id: 'ali-lot-soon',
     org: '阿里拍卖',

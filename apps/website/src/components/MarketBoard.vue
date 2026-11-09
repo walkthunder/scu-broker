@@ -1,16 +1,24 @@
-<script setup>
+<script setup lang="ts">
 import { computed, ref } from 'vue';
 import { markets } from '../data/site';
 
-const props = defineProps({
-  limit: { type: Number, default: 0 },
-  searchable: { type: Boolean, default: false },
-});
+type BoardTab = 'all' | 'hot' | 'gpu' | 'token';
 
-const tab = ref(props.searchable ? 'all' : 'hot');
+const props = withDefaults(
+  defineProps<{
+    limit?: number;
+    searchable?: boolean;
+  }>(),
+  {
+    limit: 0,
+    searchable: false,
+  },
+);
+
+const tab = ref<BoardTab>(props.searchable ? 'all' : 'hot');
 const query = ref('');
-const tabs = computed(() => {
-  const base = [
+const tabs = computed<{ id: BoardTab; label: string }[]>(() => {
+  const base: { id: BoardTab; label: string }[] = [
     { id: 'hot', label: '热门' },
     { id: 'gpu', label: 'GPU' },
     { id: 'token', label: 'Token' },

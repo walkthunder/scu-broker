@@ -1,6 +1,8 @@
-<script setup>
+<script setup lang="ts">
 import BrandLogo from './BrandLogo.vue';
 
+/*
+产品、指数目录、公司和资源链接先停用，模板里对应区块也停着。
 const columns = [
   {
     title: '产品',
@@ -42,6 +44,7 @@ const columns = [
     ],
   },
 ];
+*/
 </script>
 
 <template>

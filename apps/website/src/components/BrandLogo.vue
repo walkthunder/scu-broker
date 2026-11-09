@@ -1,7 +1,12 @@
-<script setup>
-defineProps({
-  label: { type: String, default: '硅元引擎首页' },
-});
+<script setup lang="ts">
+withDefaults(
+  defineProps<{
+    label?: string;
+  }>(),
+  {
+    label: '硅元引擎首页',
+  },
+);
 
 const src = `${import.meta.env.BASE_URL}new.jpg`;
 // new.jpg 画布 1056×615。只按高度缩放，宽度用 auto，避免宽高分开写把图形拉变形。

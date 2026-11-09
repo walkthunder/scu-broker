@@ -1,12 +1,16 @@
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 import PageHeader from '../components/PageHeader.vue';
 import { findProduct, products } from '../data/site';
 
 const route = useRoute();
-const product = computed(() => findProduct(route.params.slug));
-const others = computed(() => products.filter((item) => item.slug !== route.params.slug).slice(0, 3));
+const slug = computed(() => {
+  const value = route.params.slug;
+  return Array.isArray(value) ? value[0] : value;
+});
+const product = computed(() => findProduct(slug.value));
+const others = computed(() => products.filter((item) => item.slug !== slug.value).slice(0, 3));
 </script>
 
 <template>

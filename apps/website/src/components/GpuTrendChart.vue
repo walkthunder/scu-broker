@@ -1,22 +1,23 @@
-<script setup>
+<script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
+import type { GpuSeries } from '../data/board';
 
-const props = defineProps({
-  series: { type: Array, required: true },
-  labels: { type: Array, required: true },
-});
+const props = defineProps<{
+  series: GpuSeries[];
+  labels: string[];
+}>();
 
 const plotW = 640;
 const plotH = 260;
 const pad = { l: 8, r: 12, t: 20, b: 10 };
 
-const root = ref(null);
-const plot = ref(null);
+const root = ref<HTMLElement | null>(null);
+const plot = ref<HTMLElement | null>(null);
 const plotWidth = ref(360);
 const progress = ref(0);
 let frame = 0;
-let observer;
-let resizeObserver;
+let observer: IntersectionObserver | undefined;
+let resizeObserver: ResizeObserver | undefined;
 
 const extent = computed(() => {
   const values = props.series.flatMap((item) => item.values);
@@ -26,22 +27,22 @@ const extent = computed(() => {
   return { min: min - span * 0.22, max: max + span * 0.2 };
 });
 
-function xAt(index, count) {
+function xAt(index: number, count: number) {
   if (count <= 1) return pad.l;
   return pad.l + (index / (count - 1)) * (plotW - pad.l - pad.r);
 }
 
-function yAt(value) {
+function yAt(value: number) {
   const { min, max } = extent.value;
   return pad.t + (1 - (value - min) / (max - min)) * (plotH - pad.t - pad.b);
 }
 
-function lineOf(values, t) {
+function lineOf(values: number[], t: number): Array<[number, number]> {
   const count = values.length;
   const pos = Math.max(0, Math.min(1, t)) * (count - 1);
   const index = Math.floor(pos);
   const frac = pos - index;
-  const points = [];
+  const points: Array<[number, number]> = [];
   for (let i = 0; i <= index; i += 1) points.push([xAt(i, count), yAt(values[i])]);
   if (index < count - 1) {
     const value = values[index] + (values[index + 1] - values[index]) * frac;
@@ -51,7 +52,7 @@ function lineOf(values, t) {
   return points;
 }
 
-function toPath(points) {
+function toPath(points: Array<[number, number]>) {
   return points.map((point, index) => `${index ? 'L' : 'M'}${point[0].toFixed(1)},${point[1].toFixed(1)}`).join(' ');
 }
 
@@ -78,7 +79,7 @@ const yTicks = computed(() => {
   return ticks;
 });
 
-function markerIndexes(count, width) {
+function markerIndexes(count: number, width: number) {
   const last = count - 1;
   if (last <= 0) return [0];
   const inner = width * ((plotW - pad.l - pad.r) / plotW);
@@ -120,23 +121,32 @@ const markers = computed(() => {
         x: xAt(index, count),
         y: yAt(item.values[index]),
         index,
-        edge: index === 0 ? 'start' : index === count - 1 ? 'end' : 'mid',
+        edge: markerEdge(index, count),
       })),
   );
 });
 
-function markerClass(edge) {
+function markerEdge(index: number, count: number): 'start' | 'end' | 'mid' {
+  if (index === 0) return 'start';
+  if (index === count - 1) return 'end';
+  return 'mid';
+}
+
+function markerClass(edge: 'start' | 'end' | 'mid') {
   if (edge === 'end') return 'pointer-events-none absolute -translate-x-full -translate-y-full text-[11px] font-medium tabular-nums';
   if (edge === 'start') return 'pointer-events-none absolute -translate-y-full text-[11px] font-medium tabular-nums';
   return 'pointer-events-none absolute -translate-x-1/2 -translate-y-full text-[11px] font-medium tabular-nums';
 }
 
 const summary = computed(() => {
-  const parts = props.series.map((item) => `${item.name} ${item.values.at(-1).toFixed(2)}`);
+  const parts = props.series.map((item) => {
+    const last = item.values[item.values.length - 1] ?? 0;
+    return `${item.name} ${last.toFixed(2)}`;
+  });
   return `近 12 期演示走势，${parts.join('，')}`;
 });
 
-function ease(t) {
+function ease(t: number) {
   return t < 0.5 ? 4 * t * t * t : 1 - ((-2 * t + 2) ** 3) / 2;
 }
 
@@ -163,7 +173,7 @@ onMounted(() => {
       observer?.disconnect();
       const start = performance.now();
       const duration = 2600;
-      const tick = (now) => {
+      const tick = (now: number) => {
         const t = Math.min(1, (now - start) / duration);
         progress.value = ease(t);
         if (t < 1) frame = requestAnimationFrame(tick);
@@ -181,7 +191,7 @@ onUnmounted(() => {
   resizeObserver?.disconnect();
 });
 
-function tickShift() {
+function tickShift(_index: number) {
   return '-50%';
 }
 </script>

@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import PageHeader from '../components/PageHeader.vue';
 import MarketBoard from '../components/MarketBoard.vue';
 </script>

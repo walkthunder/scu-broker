@@ -1,9 +1,9 @@
-<script setup>
+<script setup lang="ts">
 import PageHeader from '../components/PageHeader.vue';
-import { plans } from '../data/site';
+import { plans, type Plan } from '../data/site';
 import { customerUrl, partnerUrl } from '../links';
 
-function hrefOf(plan) {
+function hrefOf(plan: Plan) {
   if (plan.cta === 'customer') return customerUrl;
   if (plan.cta === 'partner') return partnerUrl;
   if (plan.cta === 'contact') return '/contact';

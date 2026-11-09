@@ -1,17 +1,19 @@
-<script setup>
+<script setup lang="ts">
 import { computed, ref } from 'vue';
-import { auctions } from '../data/board';
+import { auctions, type Auction, type AuctionStatus } from '../data/board';
 
-const tab = ref('all');
+type AuctionTab = 'all' | AuctionStatus | 'within3';
+
+const tab = ref<AuctionTab>('all');
 const note = ref('');
 
-const statusView = {
+const statusView: Record<AuctionStatus, { label: string; dot: string; text: string }> = {
   soon: { label: '即将开始', dot: 'bg-gold', text: 'text-gold' },
   live: { label: '竞价中', dot: 'bg-[#0ECB81]', text: 'text-[#0ECB81]' },
   done: { label: '已成交', dot: 'bg-mute', text: 'text-mute' },
 };
 
-const tabs = computed(() => [
+const tabs = computed<{ id: AuctionTab; label: string; count: number }[]>(() => [
   { id: 'all', label: '全部', count: auctions.length },
   { id: 'live', label: '竞价中', count: auctions.filter((item) => item.status === 'live').length },
   { id: 'soon', label: '即将开始', count: auctions.filter((item) => item.status === 'soon').length },
@@ -25,12 +27,12 @@ const rows = computed(() => {
   return auctions.filter((item) => item.status === tab.value);
 });
 
-function choose(id) {
+function choose(id: AuctionTab) {
   tab.value = id;
   note.value = '';
 }
 
-function openRow(row) {
+function openRow(row: Auction) {
   note.value = `「${row.title}」是演示记录，这里不跳转外部挂牌。`;
 }
 </script>
